@@ -545,6 +545,91 @@ int8_t z_bytes_serialize_from_string_copy(z_owned_bytes_t *bytes, const char *s)
     return _Z_RES_OK;
 }
 
+int8_t z_bytes_serialize_from_iter(z_owned_bytes_t *bytes, bool (*iterator_body)(z_owned_bytes_t *data, void *context),
+                                   void *context) {
+    // Init owned bytes
+    z_bytes_null(bytes);
+    bytes->_val = (_z_bytes_t *)z_malloc(sizeof(_z_bytes_t));
+    if (bytes->_val == NULL) {
+        return _Z_ERR_SYSTEM_OUT_OF_MEMORY;
+    }
+    // Allocate temporary slice vector
+    size_t curr_vect_size = 16; // Arbitrary base value
+    z_owned_bytes_t *tmp_vector = (z_owned_bytes_t *)z_malloc(curr_vect_size * sizeof(z_owned_bytes_t *));
+    if (tmp_vector == NULL) {
+        return _Z_ERR_SYSTEM_OUT_OF_MEMORY;
+    }
+    // Iterate
+    size_t vect_idx = 0;
+    while (iterator_body(&tmp_vector[vect_idx], context)) {
+        vect_idx++;
+        // Double size every time we need to expand vector
+        if (vect_idx >= curr_vect_size) {
+            curr_vect_size *= 2u;
+            tmp_vector = (z_owned_bytes_t *)z_realloc(tmp_vector, curr_vect_size);
+        }
+    }
+    // Calculate total length
+    size_t total_size = 0;
+    for (size_t i = 0; i < vect_idx; i++) {
+        z_owned_bytes_t *curr_data = &tmp_vector[i];
+        total_size += curr_data->_val->_slice.len;
+    }
+    // Allocate final data
+    *bytes->_val = _z_bytes_make(total_size);
+    if (!_z_bytes_check(*bytes->_val)) {
+        return _Z_ERR_SYSTEM_OUT_OF_MEMORY;
+    }
+    // Serialize all the data
+    size_t data_idx = 0;
+    for (size_t i = 0; i < vect_idx; i++) {
+        z_owned_bytes_t *curr_data = &tmp_vector[i];
+        size_t curr_len = curr_data->_val->_slice.len;
+        memcpy((uint8_t *)&bytes->_val->_slice.start[data_idx], curr_data->_val->_slice.start, curr_len);
+        data_idx += curr_len;
+    }
+    // Clean up temp vector
+    for (size_t i = 0; i < vect_idx; i++) {
+        z_owned_bytes_t *curr_data = &tmp_vector[i];
+        z_bytes_drop(curr_data);
+    }
+    z_free(tmp_vector);
+    return _Z_RES_OK;
+}
+
+int8_t z_bytes_serialize_from_pair(z_owned_bytes_t *bytes, z_owned_bytes_t *first, z_owned_bytes_t *second) {
+    // Init owned bytes
+    z_bytes_null(bytes);
+    bytes->_val = (_z_bytes_t *)z_malloc(sizeof(_z_bytes_t));
+    if (bytes->_val == NULL) {
+        return _Z_ERR_SYSTEM_OUT_OF_MEMORY;
+    }
+    // Calculate pair size
+    size_t first_len = z_slice_len(&first->_val->_slice);
+    size_t second_len = z_slice_len(&second->_val->_slice);
+    size_t total_len = 2 * sizeof(uint32_t) + first_len + second_len;
+    // Allocate bytes
+    *bytes->_val = _z_bytes_make(total_len);
+    if (!_z_bytes_check(*bytes->_val)) {
+        return _Z_ERR_SYSTEM_OUT_OF_MEMORY;
+    }
+    // Copy data
+    // FIXME: size endianness, Issue #420
+    size_t curr_idx = 0;
+    memcpy((uint8_t *)&bytes->_val->_slice.start[curr_idx], &first_len, sizeof(uint32_t));
+    curr_idx += sizeof(uint32_t);
+    memcpy((uint8_t *)&bytes->_val->_slice.start[curr_idx], z_slice_data(&first->_val->_slice), first_len);
+    curr_idx += first_len;
+    memcpy((uint8_t *)&bytes->_val->_slice.start[curr_idx], &second_len, sizeof(uint32_t));
+    curr_idx += sizeof(uint32_t);
+    memcpy((uint8_t *)&bytes->_val->_slice.start[curr_idx], z_slice_data(&second->_val->_slice), second_len);
+    curr_idx += second_len;
+    // Clean up
+    z_bytes_drop(first);
+    z_bytes_drop(second);
+    return _Z_RES_OK;
+}
+
 int8_t zp_bytes_serialize_from_iter(z_owned_bytes_t *bytes,
                                     _Bool (*iterator_body)(z_owned_bytes_t *data, void *context, size_t *curr_idx),
                                     void *context, size_t total_len) {

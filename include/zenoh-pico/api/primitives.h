@@ -798,6 +798,31 @@ int8_t z_bytes_serialize_from_string_copy(z_owned_bytes_t *bytes, const char *s)
  *   bytes: An uninitialized :c:type:`z_owned_bytes_t` to contain the encoded payload.
  *   iterator_body: Iterator body function, providing data items. Returning false is treated as iteration end.
  *   context: Arbitrary context that will be passed to iterator_body.
+ *
+ * Return:
+ *   ``0`` if encode successful, ``negative value`` otherwise.
+ */
+int8_t z_bytes_serialize_from_iter(z_owned_bytes_t *bytes, bool (*iterator_body)(z_owned_bytes_t *data, void *context),
+                                   void *context);
+/**
+ * Append a pair of `z_owned_bytes` objects which are consumed in the process.
+ *
+ * Parameters:
+ *   bytes: An pre-initialized :c:type:`z_owned_bytes_t` to contain the encoded pair.
+ *   first: Pointer to the first `z_owned_bytes` to encode.
+ *   second: Pointer to the second `z_owned_bytes` to encode.
+ *
+ * Return:
+ *   ``0`` if encode successful, ``negative value`` otherwise.
+ */
+int8_t z_bytes_serialize_from_pair(z_owned_bytes_t *bytes, z_owned_bytes_t *first, z_owned_bytes_t *second);
+
+/**
+ * Constructs payload from an iterator to `z_owned_bytes_t`.
+ * Parameters:
+ *   bytes: An uninitialized :c:type:`z_owned_bytes_t` to contain the encoded payload.
+ *   iterator_body: Iterator body function, providing data items. Returning false is treated as iteration end.
+ *   context: Arbitrary context that will be passed to iterator_body.
  *   total_len: The length of all the items to encode.
  *
  * Return:
