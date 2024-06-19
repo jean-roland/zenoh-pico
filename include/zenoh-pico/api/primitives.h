@@ -616,6 +616,19 @@ int8_t z_bytes_deserialize_into_string(const z_loaned_bytes_t *bytes, z_owned_st
  *   bytes: Pointer to a :c:type:`z_loaned_bytes_t` to decode.
  *   first: Pointer to an uninitialized :c:type:`z_owned_bytes_t` to contain the first element.
  *   second: Pointer to an uninitialized :c:type:`z_owned_bytes_t` to contain the second element.
+ *
+ * Return:
+ *   ``0`` if decode successful, or a ``negative value`` otherwise.
+ */
+int8_t z_bytes_deserialize_into_pair(const z_loaned_bytes_t *bytes, z_owned_bytes_t *first, z_owned_bytes_t *second);
+
+/**
+ * Decodes data into a pair of :c:type:`z_owned_bytes_t`
+ *
+ * Parameters:
+ *   bytes: Pointer to a :c:type:`z_loaned_bytes_t` to decode.
+ *   first: Pointer to an uninitialized :c:type:`z_owned_bytes_t` to contain the first element.
+ *   second: Pointer to an uninitialized :c:type:`z_owned_bytes_t` to contain the second element.
  *   curr_idx: Pointer to the current decoding index.
  *
  * Return:

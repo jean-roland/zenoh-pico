@@ -336,6 +336,45 @@ int8_t z_bytes_deserialize_into_string(const z_loaned_bytes_t *bytes, z_owned_st
     return _Z_RES_OK;
 }
 
+int8_t z_bytes_deserialize_into_pair(const z_loaned_bytes_t *bytes, z_owned_bytes_t *first, z_owned_bytes_t *second) {
+    // Init pair of owned bytes
+    z_bytes_null(first);
+    z_bytes_null(second);
+    first->_val = (_z_bytes_t *)z_malloc(sizeof(_z_bytes_t));
+    second->_val = (_z_bytes_t *)z_malloc(sizeof(_z_bytes_t));
+    if ((first->_val == NULL) || (second->_val == NULL)) {
+        return _Z_ERR_SYSTEM_OUT_OF_MEMORY;
+    }
+    // Extract first item size
+    size_t curr_idx = 0;
+    size_t first_len = 0;
+    // FIXME: size endianness, Issue #420
+    memcpy(&first_len, &bytes->_slice.start[curr_idx], sizeof(uint32_t));
+    curr_idx += sizeof(uint32_t);
+    // Allocate first item bytes
+    *first->_val = _z_bytes_make(first_len);
+    if (!_z_bytes_check(*first->_val)) {
+        return _Z_ERR_SYSTEM_OUT_OF_MEMORY;
+    }
+    // Extract first item data
+    memcpy((uint8_t *)first->_val->_slice.start, &bytes->_slice.start[curr_idx], first_len);
+    curr_idx += first_len;
+
+    // Extract second item size
+    size_t second_len = 0;
+    memcpy(&second_len, &bytes->_slice.start[curr_idx], sizeof(uint32_t));
+    curr_idx += sizeof(uint32_t);
+    // Allocate second item bytes
+    *second->_val = _z_bytes_make(second_len);
+    if (!_z_bytes_check(*second->_val)) {
+        return _Z_ERR_SYSTEM_OUT_OF_MEMORY;
+    }
+    // Extract second item data
+    memcpy((uint8_t *)second->_val->_slice.start, &bytes->_slice.start[curr_idx], second_len);
+    curr_idx += second_len;
+    return _Z_RES_OK;
+}
+
 int8_t zp_bytes_deserialize_into_pair(const z_loaned_bytes_t *bytes, z_owned_bytes_t *first, z_owned_bytes_t *second,
                                       size_t *curr_idx) {
     // Check bound size
@@ -554,7 +593,7 @@ int8_t z_bytes_serialize_from_iter(z_owned_bytes_t *bytes, bool (*iterator_body)
         return _Z_ERR_SYSTEM_OUT_OF_MEMORY;
     }
     // Allocate temporary slice vector
-    size_t curr_vect_size = 16; // Arbitrary base value
+    size_t curr_vect_size = 16;  // Arbitrary base value
     z_owned_bytes_t *tmp_vector = (z_owned_bytes_t *)z_malloc(curr_vect_size * sizeof(z_owned_bytes_t *));
     if (tmp_vector == NULL) {
         return _Z_ERR_SYSTEM_OUT_OF_MEMORY;
