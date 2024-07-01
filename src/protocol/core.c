@@ -76,3 +76,8 @@ void _z_value_copy(_z_value_t *dst, const _z_value_t *src) {
     _z_encoding_copy(&dst->encoding, &src->encoding);
     _z_bytes_copy(&dst->payload, &src->payload);
 }
+
+void _z_value_move(_z_value_t *dst, _z_value_t *src) {
+    _z_encoding_move(&dst->encoding, &src->encoding);
+    _z_bytes_move(&dst->payload, &src->payload);
+}
