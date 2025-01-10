@@ -24,6 +24,7 @@
 #include "zenoh-pico/protocol/definitions/transport.h"
 #include "zenoh-pico/protocol/iobuf.h"
 #include "zenoh-pico/session/utils.h"
+#include "zenoh-pico/transport/common/transport.h"
 #include "zenoh-pico/transport/multicast/rx.h"
 #include "zenoh-pico/transport/multicast/transport.h"
 #include "zenoh-pico/transport/utils.h"
@@ -336,43 +337,20 @@ z_result_t _z_multicast_handle_transport_message(_z_transport_multicast_t *ztm, 
 
             if (entry == NULL)  // New peer
             {
-                entry = (_z_transport_peer_entry_t *)z_malloc(sizeof(_z_transport_peer_entry_t));
-                if (entry != NULL) {
-                    entry->_sn_res = _z_sn_max(t_msg->_body._join._seq_num_res);
-
-                    // If the new node has less representing capabilities then it is incompatible to communication
-                    if ((t_msg->_body._join._seq_num_res != Z_SN_RESOLUTION) ||
-                        (t_msg->_body._join._req_id_res != Z_REQ_RESOLUTION) ||
-                        (t_msg->_body._join._batch_size != Z_BATCH_MULTICAST_SIZE)) {
-                        ret = _Z_ERR_TRANSPORT_OPEN_SN_RESOLUTION;
-                    }
-
-                    if (ret == _Z_RES_OK) {
-                        entry->_remote_addr = _z_slice_duplicate(addr);
-                        entry->_remote_zid = t_msg->_body._join._zid;
-
-                        _z_conduit_sn_list_copy(&entry->_sn_rx_sns, &t_msg->_body._join._next_sn);
-                        _z_conduit_sn_list_decrement(entry->_sn_res, &entry->_sn_rx_sns);
-
-#if Z_FEATURE_FRAGMENTATION == 1
-                        entry->_patch =
-                            t_msg->_body._join._patch < _Z_CURRENT_PATCH ? t_msg->_body._join._patch : _Z_CURRENT_PATCH;
-                        entry->_state_reliable = _Z_DBUF_STATE_NULL;
-                        entry->_state_best_effort = _Z_DBUF_STATE_NULL;
-                        entry->_dbuf_reliable = _z_wbuf_null();
-                        entry->_dbuf_best_effort = _z_wbuf_null();
-#endif
-                        // Update lease time (set as ms during)
-                        entry->_lease = t_msg->_body._join._lease;
-                        entry->_next_lease = entry->_lease;
-                        entry->_received = true;
-
-                        ztm->_peers = _z_transport_peer_entry_list_insert(ztm->_peers, entry);
-                    } else {
-                        z_free(entry);
-                    }
-                } else {
-                    ret = _Z_ERR_SYSTEM_OUT_OF_MEMORY;
+                _z_transport_peer_param_t params = {
+                    ._addr = addr,
+                    ._batch_size = t_msg->_body._join._batch_size,
+                    ._lease = t_msg->_body._join._lease,
+                    ._patch = t_msg->_body._join._patch,
+                    ._remote_zid = &t_msg->_body._join._zid,
+                    ._req_id_res = t_msg->_body._join._req_id_res,
+                    ._seq_num_res = t_msg->_body._join._seq_num_res,
+                };
+                _z_conduit_sn_list_copy(&params._next_sn, &t_msg->_body._join._next_sn);
+                _z_transport_peer_entry_t *new_peer = NULL;
+                ret = _z_common_transport_new_peer(&new_peer, &params);
+                if (ret == _Z_RES_OK) {
+                    ztm->_peers = _z_transport_peer_entry_list_insert(ztm->_peers, new_peer);
                 }
             } else {  // Existing peer
                 entry->_received = true;
