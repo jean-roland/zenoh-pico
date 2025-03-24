@@ -223,17 +223,20 @@ z_result_t _z_listen_tcp(_z_sys_net_socket_t *sock, const _z_sys_net_endpoint_t 
 
     // Set options
     int value = true;
-    if ((ret == _Z_RES_OK) && (setsockopt(sock->_sock._fd, SOL_SOCKET, SO_REUSEADDR, (const char *)&value, sizeof(value)) < 0)) {
+    if ((ret == _Z_RES_OK) &&
+        (setsockopt(sock->_sock._fd, SOL_SOCKET, SO_REUSEADDR, (const char *)&value, sizeof(value)) < 0)) {
         ret = _Z_ERR_GENERIC;
     }
 
     int flags = 1;
-    if ((ret == _Z_RES_OK) && (setsockopt(sock->_sock._fd, SOL_SOCKET, SO_KEEPALIVE, (const char *)&flags, sizeof(flags)) < 0)) {
+    if ((ret == _Z_RES_OK) &&
+        (setsockopt(sock->_sock._fd, SOL_SOCKET, SO_KEEPALIVE, (const char *)&flags, sizeof(flags)) < 0)) {
         ret = _Z_ERR_GENERIC;
     }
 
 #if Z_FEATURE_TCP_NODELAY == 1
-    if ((ret == _Z_RES_OK) && (setsockopt(sock->_sock._fd, IPPROTO_TCP, TCP_NODELAY, (const char *)&flags, sizeof(flags)) < 0)) {
+    if ((ret == _Z_RES_OK) &&
+        (setsockopt(sock->_sock._fd, IPPROTO_TCP, TCP_NODELAY, (const char *)&flags, sizeof(flags)) < 0)) {
         ret = _Z_ERR_GENERIC;
     }
 #endif
@@ -254,7 +257,7 @@ z_result_t _z_listen_tcp(_z_sys_net_socket_t *sock, const _z_sys_net_endpoint_t 
 
     ADDRINFOA *it = NULL;
     for (it = lep._ep._iptcp; it != NULL; it = it->ai_next) {
-        if (bind(sock->_sock._fd, it->ai_addr, it->ai_addrlen) < 0) {
+        if (bind(sock->_sock._fd, it->ai_addr, (int)it->ai_addrlen) < 0) {
             if (it->ai_next == NULL) {
                 ret = _Z_ERR_GENERIC;
                 break;
