@@ -23,6 +23,8 @@
 #include "zenoh-pico/utils/pointers.h"
 #include "zenoh-pico/utils/result.h"
 
+#define OVERSIZE_FACTOR 15 / 10 // 1.5 but in integer
+
 // Nodes are chained as double linked list for lru insertion/deletion.
 typedef struct _z_lru_cache_node_data_t {
     _z_lru_cache_node_t *prev;  // List previous node
@@ -115,104 +117,192 @@ static void _z_lru_cache_clear_list(_z_lru_cache_t *cache, z_element_clear_f cle
 }
 
 // Sorted list function
-static _z_lru_cache_node_t *_z_lru_cache_search_slist(_z_lru_cache_t *cache, void *value, _z_lru_val_cmp_f compare,
-                                                      size_t *idx) {
-    int l_idx = 0;
-    int h_idx = (int)cache->len - 1;
-    while (l_idx <= h_idx) {
-        int curr_idx = (l_idx + h_idx) / 2;
+// static _z_lru_cache_node_t *_z_lru_cache_search_slist(_z_lru_cache_t *cache, void *value, _z_lru_val_cmp_f compare,
+//                                                       size_t *idx) {
+//     int l_idx = 0;
+//     int h_idx = (int)cache->len - 1;
+//     while (l_idx <= h_idx) {
+//         int curr_idx = (l_idx + h_idx) / 2;
+//         int res = compare(_z_lru_cache_node_value(cache->slist[curr_idx]), value);
+//         if (res == 0) {
+//             *idx = (size_t)curr_idx;
+//             return cache->slist[curr_idx];
+//         } else if (res < 0) {
+//             l_idx = curr_idx + 1;
+//         } else {
+//             h_idx = curr_idx - 1;
+//         }
+//     }
+//     return NULL;
+// }
+
+// static int _z_lru_cache_find_position(_z_lru_cache_node_t **slist, _z_lru_val_cmp_f compare, void *node_val,
+//                                       size_t slist_size) {
+//     int start = 0;
+//     int end = (int)slist_size - 1;
+//     while (start <= end) {
+//         int mid = start + (end - start) / 2;
+//         if (compare(_z_lru_cache_node_value(slist[mid]), node_val) < 0) {
+//             start = mid + 1;
+//         } else {
+//             end = mid - 1;
+//         }
+//     }
+//     return start;
+// }
+
+// static void _z_lru_cache_move_elem_slist(_z_lru_cache_t *cache, size_t *add_idx_addr, size_t *del_idx_addr) {
+//     size_t del_idx = (del_idx_addr == NULL) ? cache->len : *del_idx_addr;
+//     size_t add_idx = *add_idx_addr;
+//     if (add_idx == del_idx) {
+//         return;
+//     }
+//     // Move elements between the indices on the right
+//     if (del_idx >= add_idx) {
+//         memmove(&cache->slist[add_idx + 1], &cache->slist[add_idx],
+//                 (del_idx - add_idx) * sizeof(_z_lru_cache_node_t *));
+//     } else {  // Move them on the left
+//         // Rightmost value doesn't move unless we have a new maximum
+//         if (add_idx != cache->capacity - 1) {
+//             *add_idx_addr -= 1;
+//             add_idx -= 1;
+//         }
+//         memmove(&cache->slist[del_idx], &cache->slist[del_idx + 1],
+//                 (add_idx - del_idx) * sizeof(_z_lru_cache_node_t *));
+//     }
+// }
+
+// static void _z_lru_cache_insert_slist(_z_lru_cache_t *cache, _z_lru_cache_node_t *node, _z_lru_val_cmp_f compare,
+//                                       size_t *del_idx) {
+//     // Find insert position:
+//     if (cache->len == 0) {
+//         cache->slist[0] = node;
+//         return;
+//     }
+//     void *node_val = _z_lru_cache_node_value(node);
+//     size_t pos = (size_t)_z_lru_cache_find_position(cache->slist, compare, node_val, cache->len);
+//     // Move elements
+//     _z_lru_cache_move_elem_slist(cache, &pos, del_idx);
+//     // Store element
+//     cache->slist[pos] = node;
+// }
+
+// static size_t _z_lru_cache_delete_slist(_z_lru_cache_t *cache, _z_lru_cache_node_t *node, _z_lru_val_cmp_f compare) {
+//     size_t del_idx = 0;
+//     // Don't delete, return the index
+//     (void)_z_lru_cache_search_slist(cache, _z_lru_cache_node_value(node), compare, &del_idx);
+//     return del_idx;
+// }
+
+static _z_lru_cache_node_t *_z_lru_cache_search_hlist(_z_lru_cache_t *cache, void *value, _z_lru_val_cmp_f compare,
+                                                      size_t *idx, z_element_hash_f elem_hash) {
+    if (cache->slist == NULL) {
+        return NULL;
+    }
+    size_t slist_size = cache->capacity * OVERSIZE_FACTOR;
+    size_t curr_idx = elem_hash(value) % slist_size;
+    size_t try_count = 0;
+
+    // printf("Search %d %ld...", *(int *)value, curr_idx);
+    while ((cache->slist[curr_idx] != NULL) && (try_count < slist_size)) {
         int res = compare(_z_lru_cache_node_value(cache->slist[curr_idx]), value);
         if (res == 0) {
-            *idx = (size_t)curr_idx;
+            *idx = curr_idx;
+            // printf("...Found at %ld\n", curr_idx);
             return cache->slist[curr_idx];
-        } else if (res < 0) {
-            l_idx = curr_idx + 1;
         } else {
-            h_idx = curr_idx - 1;
+            // Linear probing
+            curr_idx = (curr_idx + 1) % slist_size;
         }
+        try_count++;
     }
-    return NULL;
+    // printf("...NOT FOUND\n");
+    return NULL;  // Not found
 }
 
-static int _z_lru_cache_find_position(_z_lru_cache_node_t **slist, _z_lru_val_cmp_f compare, void *node_val,
-                                      size_t slist_size) {
-    int start = 0;
-    int end = (int)slist_size - 1;
-    while (start <= end) {
-        int mid = start + (end - start) / 2;
-        if (compare(_z_lru_cache_node_value(slist[mid]), node_val) < 0) {
-            start = mid + 1;
-        } else {
-            end = mid - 1;
-        }
+static void _z_lru_cache_insert_hlist(_z_lru_cache_t *cache, _z_lru_cache_node_t *node, z_element_hash_f elem_hash) {
+    size_t slist_size = cache->capacity * OVERSIZE_FACTOR;
+    // Find insert position
+    size_t curr_idx = elem_hash(_z_lru_cache_node_value(node)) % slist_size;
+    while (cache->slist[curr_idx] != NULL) {
+        // Linear probing
+        curr_idx = (curr_idx + 1) % slist_size;
     }
-    return start;
-}
-
-static void _z_lru_cache_move_elem_slist(_z_lru_cache_t *cache, size_t *add_idx_addr, size_t *del_idx_addr) {
-    size_t del_idx = (del_idx_addr == NULL) ? cache->len : *del_idx_addr;
-    size_t add_idx = *add_idx_addr;
-    if (add_idx == del_idx) {
-        return;
-    }
-    // Move elements between the indices on the right
-    if (del_idx >= add_idx) {
-        memmove(&cache->slist[add_idx + 1], &cache->slist[add_idx],
-                (del_idx - add_idx) * sizeof(_z_lru_cache_node_t *));
-    } else {  // Move them on the left
-        // Rightmost value doesn't move unless we have a new maximum
-        if (add_idx != cache->capacity - 1) {
-            *add_idx_addr -= 1;
-            add_idx -= 1;
-        }
-        memmove(&cache->slist[del_idx], &cache->slist[del_idx + 1],
-                (add_idx - del_idx) * sizeof(_z_lru_cache_node_t *));
-    }
-}
-
-static void _z_lru_cache_insert_slist(_z_lru_cache_t *cache, _z_lru_cache_node_t *node, _z_lru_val_cmp_f compare,
-                                      size_t *del_idx) {
-    // Find insert position:
-    if (cache->len == 0) {
-        cache->slist[0] = node;
-        return;
-    }
-    void *node_val = _z_lru_cache_node_value(node);
-    size_t pos = (size_t)_z_lru_cache_find_position(cache->slist, compare, node_val, cache->len);
-    // Move elements
-    _z_lru_cache_move_elem_slist(cache, &pos, del_idx);
     // Store element
-    cache->slist[pos] = node;
+    cache->slist[curr_idx] = node;
+    // printf("Insert %d at %ld\n", *(int *)_z_lru_cache_node_value(node), curr_idx);
 }
 
-static size_t _z_lru_cache_delete_slist(_z_lru_cache_t *cache, _z_lru_cache_node_t *node, _z_lru_val_cmp_f compare) {
+static void _z_lru_cache_delete_hlist(_z_lru_cache_t *cache, _z_lru_cache_node_t *node, _z_lru_val_cmp_f compare,
+                                      z_element_hash_f elem_hash) {
+    // Find location
     size_t del_idx = 0;
-    // Don't delete, return the index
-    (void)_z_lru_cache_search_slist(cache, _z_lru_cache_node_value(node), compare, &del_idx);
-    return del_idx;
+    _z_lru_cache_node_t *del_node =
+        _z_lru_cache_search_hlist(cache, _z_lru_cache_node_value(node), compare, &del_idx, elem_hash);
+    // Clear location
+    if (del_node == NULL) {
+        assert(false);
+        _Z_ERROR("Failed to delete node");
+    } 
+    cache->slist[del_idx] = NULL;
+    // printf("Delete %d at %ld\n", *(int *)_z_lru_cache_node_value(node), del_idx);
+
+    // Backward shift: reinsert all nodes that were probing after del_idx
+    size_t idx = del_idx;
+    size_t slist_size = cache->capacity * OVERSIZE_FACTOR;
+    while (true) {
+        idx = (idx + 1) % slist_size;
+        if (cache->slist[idx] == NULL) {
+            break; // Reached an empty slot
+        }
+        // Get the node at the current index
+        _z_lru_cache_node_t *current_node = cache->slist[idx];
+        size_t ideal_idx = elem_hash(_z_lru_cache_node_value(current_node)) % slist_size;
+
+        // Check if the node's ideal position is <= del_idx or if it's in a "displaced" position
+        bool should_move = false;
+        if (idx > del_idx) {
+            should_move = (ideal_idx <= del_idx) || (ideal_idx > idx);
+        } else {
+            should_move = (ideal_idx <= del_idx) && (ideal_idx > idx);
+        }
+        if (should_move) {
+            // Move the node to the deleted slot
+            cache->slist[del_idx] = current_node;
+            cache->slist[idx] = NULL;
+            del_idx = idx; // Update the deleted slot index
+        }
+    }
 }
 
 // Main static functions
-static size_t _z_lru_cache_delete_last(_z_lru_cache_t *cache, _z_lru_val_cmp_f compare) {
+static size_t _z_lru_cache_delete_last(_z_lru_cache_t *cache, _z_lru_val_cmp_f compare, z_element_hash_f elem_hash) {
     _z_lru_cache_node_t *last = cache->tail;
     assert(last != NULL);
     _z_lru_cache_remove_list_node(cache, last);
-    size_t del_idx = _z_lru_cache_delete_slist(cache, last, compare);
+    // size_t del_idx = _z_lru_cache_delete_slist(cache, last, compare);
+    _z_lru_cache_delete_hlist(cache, last, compare, elem_hash);
     z_free(last);
     cache->len--;
-    return del_idx;
+    // return del_idx;
+    return 0;
 }
 
 static void _z_lru_cache_insert_node(_z_lru_cache_t *cache, _z_lru_cache_node_t *node, _z_lru_val_cmp_f compare,
-                                     size_t *del_idx) {
+                                     size_t *del_idx, z_element_hash_f elem_hash) {
     _z_lru_cache_insert_list_node(cache, node);
-    _z_lru_cache_insert_slist(cache, node, compare, del_idx);
+    // _z_lru_cache_insert_slist(cache, node, compare, del_idx);
+    _ZP_UNUSED(del_idx);
+    _ZP_UNUSED(compare);
+    _z_lru_cache_insert_hlist(cache, node, elem_hash);
     cache->len++;
 }
 
-static _z_lru_cache_node_t *_z_lru_cache_search_node(_z_lru_cache_t *cache, void *value, _z_lru_val_cmp_f compare) {
+static _z_lru_cache_node_t *_z_lru_cache_search_node(_z_lru_cache_t *cache, void *value, _z_lru_val_cmp_f compare,
+                                                     z_element_hash_f elem_hash) {
     size_t idx = 0;
-    return _z_lru_cache_search_slist(cache, value, compare, &idx);
+    // return _z_lru_cache_search_slist(cache, value, compare, &idx);
+    return _z_lru_cache_search_hlist(cache, value, compare, &idx, elem_hash);
 }
 
 // Public functions
@@ -222,9 +312,9 @@ _z_lru_cache_t _z_lru_cache_init(size_t capacity) {
     return cache;
 }
 
-void *_z_lru_cache_get(_z_lru_cache_t *cache, void *value, _z_lru_val_cmp_f compare) {
+void *_z_lru_cache_get(_z_lru_cache_t *cache, void *value, _z_lru_val_cmp_f compare, z_element_hash_f elem_hash) {
     // Lookup if node exists.
-    _z_lru_cache_node_t *node = _z_lru_cache_search_node(cache, value, compare);
+    _z_lru_cache_node_t *node = _z_lru_cache_search_node(cache, value, compare, elem_hash);
     if (node == NULL) {
         return NULL;
     }
@@ -233,15 +323,18 @@ void *_z_lru_cache_get(_z_lru_cache_t *cache, void *value, _z_lru_val_cmp_f comp
     return _z_lru_cache_node_value(node);
 }
 
-z_result_t _z_lru_cache_insert(_z_lru_cache_t *cache, void *value, size_t value_size, _z_lru_val_cmp_f compare) {
+z_result_t _z_lru_cache_insert(_z_lru_cache_t *cache, void *value, size_t value_size, _z_lru_val_cmp_f compare,
+                               z_element_hash_f elem_hash) {
+    _ZP_UNUSED(elem_hash);
     assert(cache->capacity > 0);
+    size_t slist_size = cache->capacity * OVERSIZE_FACTOR;
     // Init slist
     if (cache->slist == NULL) {
-        cache->slist = (_z_lru_cache_node_t **)z_malloc(cache->capacity * sizeof(void *));
+        cache->slist = (_z_lru_cache_node_t **)z_malloc(slist_size * sizeof(void *));
         if (cache->slist == NULL) {
             _Z_ERROR_RETURN(_Z_ERR_SYSTEM_OUT_OF_MEMORY);
         }
-        memset(cache->slist, 0, cache->capacity * sizeof(void *));
+        memset(cache->slist, 0, slist_size * sizeof(void *));
     }
     // Create node
     _z_lru_cache_node_t *node = _z_lru_cache_node_create(value, value_size);
@@ -253,18 +346,18 @@ z_result_t _z_lru_cache_insert(_z_lru_cache_t *cache, void *value, size_t value_
     // Check capacity
     if (cache->len == cache->capacity) {
         // Delete lru entry
-        del_idx = _z_lru_cache_delete_last(cache, compare);
+        del_idx = _z_lru_cache_delete_last(cache, compare, elem_hash);
         del_idx_addr = &del_idx;
     }
     // Update the cache
-    _z_lru_cache_insert_node(cache, node, compare, del_idx_addr);
+    _z_lru_cache_insert_node(cache, node, compare, del_idx_addr, elem_hash);
     return _Z_RES_OK;
 }
 
 void _z_lru_cache_clear(_z_lru_cache_t *cache, z_element_clear_f clear) {
     // Reset slist
     if (cache->slist != NULL) {
-        memset(cache->slist, 0, cache->capacity * sizeof(void *));
+        memset(cache->slist, 0, cache->capacity * sizeof(void *) * OVERSIZE_FACTOR);
     }
     // Clear list
     _z_lru_cache_clear_list(cache, clear);

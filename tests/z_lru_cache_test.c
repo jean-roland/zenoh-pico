@@ -19,6 +19,7 @@
 
 #include "zenoh-pico/collections/lru_cache.h"
 #include "zenoh-pico/system/common/platform.h"
+#include "zenoh-pico/utils/hash.h"
 
 #undef NDEBUG
 #include <assert.h>
@@ -42,6 +43,17 @@ int _dummy_compare(const void *first, const void *second) {
 }
 
 static inline void _dummy_elem_clear(void *e) { _z_noop_clear((_dummy_t *)e); }
+
+static inline size_t _dummy_elem_hash(const void *e) { 
+    int val = ((_dummy_t *)e)->foo;
+    size_t hash = _Z_FNV_OFFSET_BASIS;
+
+    for (size_t i = 0; i < sizeof(int); i++) {
+        hash ^= ((uint8_t *)&val)[i];
+        hash *= _Z_FNV_PRIME;
+    }
+    return hash;
+}
 
 _Z_LRU_CACHE_DEFINE(_dummy, _dummy_t, _dummy_compare)
 
@@ -206,18 +218,39 @@ void test_lru_cache_random_val(void) {
     _dummy_lru_cache_delete(&dcache);
 }
 
-#if 0
+#if 1
 #define BENCH_THRESHOLD 1000000
+
+#define LCG_A 1664525
+#define LCG_C 0
+#define LCG_M 4294967296 // 2^32
+
+typedef struct {
+    uint32_t state;
+} lcg_state;
+
+void lcg_seed(lcg_state *state, uint32_t seed) {
+    state->state = seed;
+}
+
+int lcg_next(lcg_state *state) {
+    state->state = (LCG_A * state->state + LCG_C) % LCG_M;
+    return (int)state->state;
+}
+
 
 void test_search_benchmark(size_t capacity) {
     _dummy_lru_cache_t dcache = _dummy_lru_cache_init(capacity);
     _dummy_t data[capacity];
     memset(data, 0, capacity * sizeof(_dummy_t));
 
+    lcg_state state;
+    lcg_seed(&state, 0x55);
     srand(0x55);
+
     // Insert data
     for (size_t i = 0; i < _ZP_ARRAY_SIZE(data); i++) {
-        data[i].foo = rand();
+        data[i].foo = lcg_next(&state);
         assert(_dummy_lru_cache_insert(&dcache, &data[i]) == 0);
     }
     z_clock_t measure_start = z_clock_now();
@@ -234,11 +267,13 @@ void test_search_benchmark(size_t capacity) {
 void test_insert_benchmark(size_t capacity) {
     _dummy_lru_cache_t dcache = _dummy_lru_cache_init(capacity);
 
-    srand(0x55);
+    lcg_state state;
+    lcg_seed(&state, 0x55);
+
     // Insert data
     z_clock_t measure_start = z_clock_now();
     for (size_t get_cnt = 0; get_cnt <= BENCH_THRESHOLD; get_cnt++) {
-        _dummy_t data = {.foo = rand()};
+        _dummy_t data = {.foo = lcg_next(&state)};
         assert(_dummy_lru_cache_insert(&dcache, &data) == 0);
     }
     unsigned long elapsed_us = z_clock_elapsed_us(&measure_start);
@@ -246,7 +281,7 @@ void test_insert_benchmark(size_t capacity) {
 }
 
 void test_benchmark(void) {
-    for (size_t i = 1; i <= BENCH_THRESHOLD; i *= 10) {
+    for (size_t i = 100; i <= BENCH_THRESHOLD; i *= 10) {
         printf("Capacity: %ld\n", i);
         test_search_benchmark(i);
         test_insert_benchmark(i);
@@ -255,13 +290,13 @@ void test_benchmark(void) {
 #endif
 
 int main(void) {
-    test_lru_init();
-    test_lru_cache_insert();
-    test_lru_cache_clear();
-    test_lru_cache_deletion();
-    test_lru_cache_update();
-    test_lru_cache_random_val();
-#if 0
+    // test_lru_init();
+    // test_lru_cache_insert();
+    // test_lru_cache_clear();
+    // test_lru_cache_deletion();
+    // test_lru_cache_update();
+    // test_lru_cache_random_val();
+#if 1
     test_benchmark();
 #endif
     return 0;
