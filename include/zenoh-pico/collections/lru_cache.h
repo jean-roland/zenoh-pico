@@ -38,6 +38,7 @@ typedef void _z_lru_cache_node_t;
 typedef struct _z_lru_cache_t {
     size_t capacity;              // Max number of node
     size_t len;                   // Number of node
+    size_t slist_len;             // Size of sorted node list
     _z_lru_cache_node_t *head;    // List head
     _z_lru_cache_node_t *tail;    // List tail
     _z_lru_cache_node_t **slist;  // Sorted node list
