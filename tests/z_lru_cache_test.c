@@ -218,8 +218,8 @@ void test_lru_cache_random_val(void) {
     _dummy_lru_cache_delete(&dcache);
 }
 
-#if 1
-#define BENCH_THRESHOLD 1000000
+#if 0
+#define BENCH_THRESHOLD 10000000
 
 #define LCG_A 1664525
 #define LCG_C 0
@@ -241,7 +241,8 @@ int lcg_next(lcg_state *state) {
 
 void test_search_benchmark(size_t capacity) {
     _dummy_lru_cache_t dcache = _dummy_lru_cache_init(capacity);
-    _dummy_t data[capacity];
+    _dummy_t *data = (_dummy_t *)malloc(capacity * sizeof(_dummy_t));
+    assert(data != NULL);
     memset(data, 0, capacity * sizeof(_dummy_t));
 
     lcg_state state;
@@ -249,19 +250,20 @@ void test_search_benchmark(size_t capacity) {
     srand(0x55);
 
     // Insert data
-    for (size_t i = 0; i < _ZP_ARRAY_SIZE(data); i++) {
+    for (size_t i = 0; i < capacity; i++) {
         data[i].foo = lcg_next(&state);
         assert(_dummy_lru_cache_insert(&dcache, &data[i]) == 0);
     }
     z_clock_t measure_start = z_clock_now();
     for (size_t get_cnt = 0; get_cnt <= BENCH_THRESHOLD; get_cnt++) {
-        int i = rand() % (int)_ZP_ARRAY_SIZE(data);
+        int i = rand() % (int)capacity;
         _dummy_t *src = &data[i];
         _dummy_t *res = _dummy_lru_cache_get(&dcache, src);
         assert(res != NULL);
     }
     unsigned long elapsed_us = z_clock_elapsed_us(&measure_start);
-    printf("Time to search: %ld\n", elapsed_us);
+    // printf("Time to search: %ld\n", elapsed_us);
+    printf("%ld\n", elapsed_us);
 }
 
 void test_insert_benchmark(size_t capacity) {
@@ -277,12 +279,13 @@ void test_insert_benchmark(size_t capacity) {
         assert(_dummy_lru_cache_insert(&dcache, &data) == 0);
     }
     unsigned long elapsed_us = z_clock_elapsed_us(&measure_start);
-    printf("Time to insert: %ld\n", elapsed_us);
+    // printf("Time to insert: %ld\n", elapsed_us);
+    printf("%ld\n", elapsed_us);
 }
 
 void test_benchmark(void) {
-    for (size_t i = 100; i <= BENCH_THRESHOLD; i *= 10) {
-        printf("Capacity: %ld\n", i);
+    for (size_t i = 10; i <= BENCH_THRESHOLD; i *= 10) {
+        // printf("Capacity: %ld\n", i);
         test_search_benchmark(i);
         test_insert_benchmark(i);
     }
@@ -290,13 +293,13 @@ void test_benchmark(void) {
 #endif
 
 int main(void) {
-    // test_lru_init();
-    // test_lru_cache_insert();
-    // test_lru_cache_clear();
-    // test_lru_cache_deletion();
-    // test_lru_cache_update();
-    // test_lru_cache_random_val();
-#if 1
+    test_lru_init();
+    test_lru_cache_insert();
+    test_lru_cache_clear();
+    test_lru_cache_deletion();
+    test_lru_cache_update();
+    test_lru_cache_random_val();
+#if 0
     test_benchmark();
 #endif
     return 0;
