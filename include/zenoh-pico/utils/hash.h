@@ -38,6 +38,17 @@ static inline size_t _z_hash_combine(size_t h1, size_t h2) {
     return h1;
 }
 
+static inline size_t _z_hash_bytes(const void *data, size_t len) {
+    size_t hash = _Z_FNV_OFFSET_BASIS;
+    const uint8_t *bytes = (const uint8_t *)data;
+
+    for (size_t i = 0; i < len; i++) {
+        hash ^= bytes[i];
+        hash *= _Z_FNV_PRIME;
+    }
+    return hash;
+}
+
 #ifdef __cplusplus
 }
 #endif

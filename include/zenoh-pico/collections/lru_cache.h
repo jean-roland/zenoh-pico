@@ -37,7 +37,7 @@ typedef void _z_lru_cache_node_t;
  */
 typedef struct _z_lru_cache_t {
     size_t capacity;              // Max number of node
-    size_t len;                   // Number of node
+    size_t len;                   // Current number of node
     size_t slist_len;             // Size of sorted node list
     _z_lru_cache_node_t *head;    // List head
     _z_lru_cache_node_t *tail;    // List tail
@@ -46,7 +46,8 @@ typedef struct _z_lru_cache_t {
 
 _z_lru_cache_t _z_lru_cache_init(size_t capacity);
 void *_z_lru_cache_get(_z_lru_cache_t *cache, void *value, _z_lru_val_cmp_f compare, z_element_hash_f elem_hash);
-z_result_t _z_lru_cache_insert(_z_lru_cache_t *cache, void *value, size_t value_size, _z_lru_val_cmp_f compare, z_element_hash_f elem_hash);
+z_result_t _z_lru_cache_insert(_z_lru_cache_t *cache, void *value, size_t value_size, _z_lru_val_cmp_f compare,
+                               z_element_hash_f elem_hash);
 void _z_lru_cache_clear(_z_lru_cache_t *cache, z_element_clear_f clear);
 void _z_lru_cache_delete(_z_lru_cache_t *cache, z_element_clear_f clear);
 
@@ -54,10 +55,10 @@ void _z_lru_cache_delete(_z_lru_cache_t *cache, z_element_clear_f clear);
     typedef _z_lru_cache_t name##_lru_cache_t;                                                                      \
     static inline name##_lru_cache_t name##_lru_cache_init(size_t capacity) { return _z_lru_cache_init(capacity); } \
     static inline type *name##_lru_cache_get(name##_lru_cache_t *cache, type *val) {                                \
-        return (type *)_z_lru_cache_get(cache, (void *)val, compare_f, name##_elem_hash);                                             \
+        return (type *)_z_lru_cache_get(cache, (void *)val, compare_f, name##_elem_hash);                           \
     }                                                                                                               \
     static inline z_result_t name##_lru_cache_insert(name##_lru_cache_t *cache, type *val) {                        \
-        return _z_lru_cache_insert(cache, (void *)val, sizeof(type), compare_f, name##_elem_hash);                                    \
+        return _z_lru_cache_insert(cache, (void *)val, sizeof(type), compare_f, name##_elem_hash);                  \
     }                                                                                                               \
     static inline void name##_lru_cache_clear(name##_lru_cache_t *cache) {                                          \
         _z_lru_cache_clear(cache, name##_elem_clear);                                                               \
