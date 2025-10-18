@@ -26,7 +26,8 @@
 // #define USE_HASH
 
 #if defined USE_HASH
-#define OVERSIZE_FACTOR 12 / 10  // 1.2 but in integer
+// To avoid high load factor in hash table, we oversize it by 20%
+#define OVERSIZE_FACTOR 12 / 10
 #else
 #define OVERSIZE_FACTOR 1
 #endif
@@ -35,9 +36,6 @@
 typedef struct _z_lru_cache_node_data_t {
     _z_lru_cache_node_t *prev;  // List previous node
     _z_lru_cache_node_t *next;  // List next node
-#if defined USE_HASH
-    size_t probe_length;  // Robin hood probing
-#endif
 } _z_lru_cache_node_data_t;
 
 #define NODE_DATA_SIZE sizeof(_z_lru_cache_node_data_t)
@@ -125,6 +123,7 @@ static void _z_lru_cache_clear_list(_z_lru_cache_t *cache, z_element_clear_f cle
     }
 }
 
+// Hash table functions
 #if defined USE_HASH
 static inline size_t incr_wrap_idx(size_t idx, size_t max) {
     if (++idx >= max) {
@@ -161,66 +160,6 @@ static _z_lru_cache_node_t *_z_lru_cache_search_hlist(_z_lru_cache_t *cache, voi
     }
     return NULL;  // Not found
 }
-
-// // Warning: not protected against value duplicate
-// static void _z_lru_cache_insert_hlist(_z_lru_cache_t *cache, _z_lru_cache_node_t *new_node, z_element_hash_f elem_hash) {
-//     size_t curr_idx = elem_hash(_z_lru_cache_node_value(new_node)) % cache->slist_len;
-//     size_t curr_probe_length = 0;
-//     _z_lru_cache_node_t *curr_node = cache->slist[curr_idx];
-
-//     // Find free slot with Robin Hood adressing
-//     while (curr_node != NULL) {
-//         // If existing node is "poorer", swap nodes
-//         if (_z_lru_cache_node_data(curr_node)->probe_length < curr_probe_length) {
-//             _z_lru_cache_node_data(new_node)->probe_length = curr_probe_length;
-//             cache->slist[curr_idx] = new_node;
-//             new_node = curr_node;
-//             curr_probe_length = _z_lru_cache_node_data(new_node)->probe_length;
-//         }
-//         // Move to next slot
-//         curr_probe_length++;
-//         curr_idx = incr_wrap_idx(curr_idx, cache->slist_len);
-//         curr_node = cache->slist[curr_idx];
-//     }
-//     // Insert node
-//     _z_lru_cache_node_data(new_node)->probe_length = curr_probe_length;
-//     cache->slist[curr_idx] = new_node;
-// }
-
-// static void _z_lru_cache_delete_hlist(_z_lru_cache_t *cache, _z_lru_cache_node_t *node, _z_lru_val_cmp_f compare,
-//                                       z_element_hash_f elem_hash) {
-//     size_t del_idx = 0;
-//     _z_lru_cache_node_t *del_node =
-//         _z_lru_cache_search_hlist(cache, _z_lru_cache_node_value(node), compare, &del_idx, elem_hash);
-//     if (del_node == NULL) {
-//         _Z_ERROR("Failed to delete node");
-//         assert(false);
-//     }
-//     // Clear location
-//     cache->slist[del_idx] = NULL;
-//     // Robin Hood backward shift 
-//     size_t idx = del_idx;
-//     while (true) {
-//         idx = incr_wrap_idx(idx, cache->slist_len);
-//         if (cache->slist[idx] == NULL) {
-//             break;  // Reached an empty slot
-//         }
-//         _z_lru_cache_node_t *current_node = cache->slist[idx];
-//         size_t ideal_idx = elem_hash(_z_lru_cache_node_value(current_node)) % cache->slist_len;
-//         // Node is in its ideal position
-//         if (idx == ideal_idx) {
-//             break;  
-//         }
-//         size_t new_probe_length = wrap_idx(cache->slist_len + del_idx - ideal_idx, cache->slist_len);
-//         // Move only if probe length decreases
-//         if (new_probe_length < _z_lru_cache_node_data(current_node)->probe_length) {
-//             cache->slist[del_idx] = current_node;
-//             cache->slist[idx] = NULL;
-//             _z_lru_cache_node_data(current_node)->probe_length = new_probe_length;
-//             del_idx = idx;
-//         }
-//     }
-// }
 
 // Warning: not protected against value duplicate
 static void _z_lru_cache_insert_hlist(_z_lru_cache_t *cache, _z_lru_cache_node_t *node, z_element_hash_f elem_hash) {
@@ -362,6 +301,7 @@ static size_t _z_lru_cache_delete_last(_z_lru_cache_t *cache, _z_lru_val_cmp_f c
     _z_lru_cache_delete_hlist(cache, last, compare, elem_hash);
     size_t del_idx = 0;  // Not used
 #else
+    _ZP_UNUSED(elem_hash);
     size_t del_idx = _z_lru_cache_delete_slist(cache, last, compare);
 #endif
     z_free(last);
@@ -377,6 +317,7 @@ static void _z_lru_cache_insert_node(_z_lru_cache_t *cache, _z_lru_cache_node_t 
     _ZP_UNUSED(compare);
     _z_lru_cache_insert_hlist(cache, node, elem_hash);
 #else
+    _ZP_UNUSED(elem_hash);
     _z_lru_cache_insert_slist(cache, node, compare, del_idx);
 #endif
     cache->len++;
@@ -388,6 +329,7 @@ static _z_lru_cache_node_t *_z_lru_cache_search_node(_z_lru_cache_t *cache, void
 #if defined USE_HASH
     return _z_lru_cache_search_hlist(cache, value, compare, &idx, elem_hash);
 #else
+    _ZP_UNUSED(elem_hash);
     return _z_lru_cache_search_slist(cache, value, compare, &idx);
 #endif
 }

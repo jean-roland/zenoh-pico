@@ -44,15 +44,9 @@ int _dummy_compare(const void *first, const void *second) {
 
 static inline void _dummy_elem_clear(void *e) { _z_noop_clear((_dummy_t *)e); }
 
-static inline size_t _dummy_elem_hash(const void *e) { 
-    int val = ((_dummy_t *)e)->foo;
-    size_t hash = _Z_FNV_OFFSET_BASIS;
-
-    for (size_t i = 0; i < sizeof(int); i++) {
-        hash ^= ((uint8_t *)&val)[i];
-        hash *= _Z_FNV_PRIME;
-    }
-    return hash;
+static inline size_t _dummy_elem_hash(const void *e) {
+    int *val = &((_dummy_t *)e)->foo;
+    return _z_hash_bytes(val, sizeof(int));
 }
 
 _Z_LRU_CACHE_DEFINE(_dummy, _dummy_t, _dummy_compare)
@@ -223,21 +217,18 @@ void test_lru_cache_random_val(void) {
 
 #define LCG_A 1664525
 #define LCG_C 0
-#define LCG_M 4294967296 // 2^32
+#define LCG_M 4294967296  // 2^32
 
 typedef struct {
     uint32_t state;
 } lcg_state;
 
-void lcg_seed(lcg_state *state, uint32_t seed) {
-    state->state = seed;
-}
+void lcg_seed(lcg_state *state, uint32_t seed) { state->state = seed; }
 
 int lcg_next(lcg_state *state) {
     state->state = (LCG_A * state->state + LCG_C) % LCG_M;
     return (int)state->state;
 }
-
 
 void test_search_benchmark(size_t capacity) {
     _dummy_lru_cache_t dcache = _dummy_lru_cache_init(capacity);
@@ -284,7 +275,7 @@ void test_insert_benchmark(size_t capacity) {
 }
 
 void test_benchmark(void) {
-    for (size_t i = 10; i <= BENCH_THRESHOLD; i *= 10) {
+    for (size_t i = 1; i <= BENCH_THRESHOLD; i *= 10) {
         // printf("Capacity: %ld\n", i);
         test_search_benchmark(i);
         test_insert_benchmark(i);
