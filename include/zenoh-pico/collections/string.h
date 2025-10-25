@@ -20,6 +20,7 @@
 #include "zenoh-pico/collections/list.h"
 #include "zenoh-pico/collections/slice.h"
 #include "zenoh-pico/collections/vec.h"
+#include "zenoh-pico/utils/hash.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -104,6 +105,10 @@ static inline _z_string_t _z_string_from_str_custom_deleter(char *value, _z_dele
 }
 static inline void _z_string_reset(_z_string_t *str) { _z_slice_reset(&str->_slice); }
 static inline void _z_string_clear(_z_string_t *str) { _z_slice_clear(&str->_slice); }
+static inline size_t _z_string_hash(const void *e) {
+    _z_slice_t *val = &((_z_string_t *)e)->_slice;
+    return _z_hash_bytes(val->start, val->len);
+}
 
 _z_string_t _z_string_copy_from_str(const char *value);
 _z_string_t _z_string_copy_from_substr(const char *value, size_t len);
@@ -125,7 +130,7 @@ _z_string_t _z_string_preallocate(const size_t len);
 char *_z_str_from_string_clone(const _z_string_t *str);
 
 _Z_ELEM_DEFINE(_z_string, _z_string_t, _z_string_len, _z_string_clear, _z_string_copy, _z_string_move, _z_string_equals,
-               _z_string_compare, _z_noop_hash)
+               _z_string_compare, _z_string_hash)
 _Z_SVEC_DEFINE(_z_string, _z_string_t)
 _Z_LIST_DEFINE(_z_string, _z_string_t)
 _Z_INT_MAP_DEFINE(_z_string, _z_string_t)
