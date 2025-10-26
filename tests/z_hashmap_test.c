@@ -32,7 +32,6 @@ typedef struct _dummy_t {
 } _dummy_t;
 
 static inline void _dummy_elem_clear(void *e) { _z_noop_clear(e); }
-static inline void _dummy_elem_free(void **e) { _z_noop_free(e); }
 
 _Z_HASHMAP_JR_DEFINE(test, _z_string, _dummy, _z_string_t, _dummy_t)
 
@@ -68,7 +67,7 @@ void test_hashmap_insert(void) {
         assert(res != NULL);
         assert(res->foo == data[i].foo);
     }
-    test_hashmap_jr_clear(&hmap);
+    test_hashmap_jr_delete(&hmap);
 }
 
 void test_hashmap_clear(void) {
@@ -84,10 +83,11 @@ void test_hashmap_clear(void) {
     }
     test_hashmap_jr_clear(&hmap);
     assert(hmap._capacity == _Z_DEFAULT_HASHMAP_JR_CAPACITY);
-    assert(hmap._vals == NULL);
+    assert(hmap._len == 0);
     for (size_t i = 0; i < HMAP_CAPACITY; i++) {
         assert(test_hashmap_jr_get(&hmap, &keys[i]) == NULL);
     }
+    test_hashmap_jr_delete(&hmap);
 }
 
 void test_hashmap_remove(void) {
@@ -114,7 +114,7 @@ void test_hashmap_remove(void) {
         assert(res != NULL);
         assert(res->foo == data[i].foo);
     }
-    test_hashmap_jr_clear(&hmap);
+    test_hashmap_jr_delete(&hmap);
 }
 
 #if 1
@@ -172,20 +172,20 @@ void test_op_benchmark(size_t capacity) {
         generate_kv(&keys[i], &data[i], &_lcg_state, key_len);
         generate_kv(&bad_keys[i], NULL, &_lcg_state, key_len);
     }
-
-    // Test: Insert keys
+    // Insert data
     z_clock_t measure_start = z_clock_now();
     for (size_t i = 0; i < capacity; i++) {
         assert(test_hashmap_jr_insert(&hmap, &keys[i], &data[i]) == _Z_RES_OK);
     }
     unsigned long elapsed_us = z_clock_elapsed_us(&measure_start);
     printf("%ld\n", elapsed_us);
-
     // Test: Get existing keys
     measure_start = z_clock_now();
     for (size_t get_cnt = 0; get_cnt <= BENCH_THRESHOLD; get_cnt++) {
         size_t key_idx = (size_t)rand() % capacity;
         _dummy_t *res = test_hashmap_jr_get(&hmap, &keys[key_idx]);
+        if (res == NULL)
+            printf("Key not found! %ld '%.*s'\n", key_idx, (int)keys[key_idx]._slice.len, (char *)keys[key_idx]._slice.start);
         assert(res != NULL);
     }
     elapsed_us = z_clock_elapsed_us(&measure_start);
@@ -196,7 +196,7 @@ void test_op_benchmark(size_t capacity) {
     for (size_t get_cnt = 0; get_cnt <= BENCH_THRESHOLD; get_cnt++) {
         size_t key_idx = (size_t)rand() % capacity;
         _dummy_t *res = test_hashmap_jr_get(&hmap, &bad_keys[key_idx]);
-        assert(res == NULL); // Ensure the key doesn't exist
+        assert(res == NULL);  // Ensure the key doesn't exist
     }
     elapsed_us = z_clock_elapsed_us(&measure_start);
     printf("%ld\n", elapsed_us);
@@ -209,8 +209,8 @@ void test_op_benchmark(size_t capacity) {
     }
     elapsed_us = z_clock_elapsed_us(&measure_start);
     printf("%ld\n", elapsed_us);
-    test_hashmap_jr_clear(&hmap);
     free(data);
+    test_hashmap_jr_delete(&hmap);
     for (size_t i = 0; i < capacity; i++) {
         _z_string_clear(&keys[i]);
         _z_string_clear(&bad_keys[i]);

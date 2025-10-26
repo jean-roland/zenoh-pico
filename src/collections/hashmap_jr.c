@@ -18,43 +18,58 @@
 
 #include "zenoh-pico/collections/jr_hashmap.h"
 #include "zenoh-pico/utils/logging.h"
+#include "zenoh-pico/utils/pointers.h"
 
 #define EXPAND_LOAD_FACTOR 8  // 8/10th to avoid float
+#define INDEX_WRAP(idx, capacity) ((idx) & (capacity - 1))
+// #define INDEX_WRAP(idx, capacity) ((idx) % (capacity ))
+
+static inline void *_z_hashmap_jr_entry_key(_z_hashmap_jr_entry_t *entry) { return (void *)entry; }
+
+static inline void *_z_hashmap_jr_entry_value(_z_hashmap_jr_entry_t *entry, size_t key_size) {
+    return (void *)_z_ptr_u8_offset((uint8_t *)entry, (ptrdiff_t)key_size);
+}
 
 static inline _z_hashmap_jr_t _z_hashmap_jr_null(void) { return (_z_hashmap_jr_t){0}; }
 
-static void _z_hashmap_jr_elem_free(void **e) {
-    _z_hashmap_entry_jr_t *ptr = (_z_hashmap_entry_jr_t *)*e;
-    if (ptr != NULL) {
-        z_free(ptr);
-        *e = NULL;
+static inline bool _z_hashmap_jr_entry_is_empty(_z_hashmap_jr_entry_t *entry, size_t key_size) {
+    uint8_t *bytes = (uint8_t *)_z_hashmap_jr_entry_key(entry);
+    for (size_t i = 0; i < key_size; i++) {
+        if (bytes[i] != 0xFF) {
+            return false;
+        }
     }
+    return true;
 }
 
-static z_result_t _z_hashmap_jr_expand(_z_hashmap_jr_t *map, z_element_hash_f f_hash, z_element_eq_f f_equals) {
+
+static inline z_result_t _z_hashmap_jr_expand(_z_hashmap_jr_t *map, z_element_hash_f f_hash, z_element_eq_f f_equals, size_t key_size, size_t val_size) {
     // Expand table if load factor exceeded
     size_t old_capacity = map->_capacity;
-    _z_list_t **old_vals = map->_vals;
+    _z_hashmap_jr_entry_t *old_vals = map->_vals;
 
     map->_capacity *= 2;
-    size_t len = map->_capacity * sizeof(_z_list_t *);
-    map->_vals = (_z_list_t **)z_malloc(len);
+    size_t map_size = map->_capacity * (key_size + val_size);
+    map->_vals = z_malloc(map_size);
     if (map->_vals == NULL) {
         map->_vals = old_vals;
         map->_capacity = old_capacity;
         _Z_ERROR_RETURN(_Z_ERR_SYSTEM_OUT_OF_MEMORY);
     }
-    (void)memset(map->_vals, 0, len);
-
-    // Rehash entries
-    for (size_t i = 0; i < old_capacity; i++) {
-        _z_list_t *curr_bucket = old_vals[i];
-        while (curr_bucket != NULL) {
-            _z_hashmap_entry_jr_t *entry = (_z_hashmap_entry_jr_t *)_z_list_value(curr_bucket);
-            _Z_RETURN_IF_ERR(_z_hashmap_jr_insert(map, entry->_key, entry->_val, f_hash, f_equals));
-            curr_bucket = _z_list_next(curr_bucket);
+    (void)memset(map->_vals, 0xff, map_size);
+    map->_len = 0;
+    // Reinsert old entries
+    for (size_t idx = 0; idx < old_capacity; idx++) {
+        _z_hashmap_jr_entry_t *old_entry =
+            (void *)_z_ptr_u8_offset((uint8_t *)old_vals, (ptrdiff_t)(idx * (key_size + val_size)));
+        if (_z_hashmap_jr_entry_is_empty(old_entry, key_size)) {
+            continue;
         }
-        _z_list_free(&old_vals[i], _z_hashmap_jr_elem_free);
+        // Reinsert entry
+        void *re_key = _z_hashmap_jr_entry_key(old_entry);
+        void *re_val = _z_hashmap_jr_entry_value(old_entry, key_size);
+        _z_hashmap_jr_insert(map, re_key, re_val, f_hash,
+                                f_equals, key_size, val_size);
     }
     z_free(old_vals);
     return _Z_RES_OK;
@@ -66,88 +81,133 @@ _z_hashmap_jr_t _z_hashmap_jr_init(size_t capacity) {
     return map;
 }
 
-z_result_t _z_hashmap_jr_insert(_z_hashmap_jr_t *map, void *k, void *v, z_element_hash_f f_hash,
-                                z_element_eq_f f_equals) {
+z_result_t _z_hashmap_jr_insert(_z_hashmap_jr_t *map, void *key, void *val, z_element_hash_f f_hash,
+                                z_element_eq_f f_equals, size_t key_size, size_t val_size) {
+    // Cannot insert "empty" key
+    assert(!_z_hashmap_jr_entry_is_empty(key, key_size));
+
     // Lazily allocate and initialize the table
     if (map->_vals == NULL) {
-        size_t len = map->_capacity * sizeof(_z_list_t *);
-        map->_vals = (_z_list_t **)z_malloc(len);
+        size_t map_size = map->_capacity * (key_size + val_size);
+        map->_vals = z_malloc(map_size);
         if (map->_vals == NULL) {
             _Z_ERROR_RETURN(_Z_ERR_SYSTEM_OUT_OF_MEMORY);
         }
-        (void)memset(map->_vals, 0, len);
+        (void)memset(map->_vals, 0xff, map_size);
     } else if (map->_len * 10 >= map->_capacity * EXPAND_LOAD_FACTOR) {
-        _Z_RETURN_IF_ERR(_z_hashmap_jr_expand(map, f_hash, f_equals));
+        _Z_RETURN_IF_ERR(_z_hashmap_jr_expand(map, f_hash, f_equals, key_size, val_size));
     }
     // Retrieve bucket
-    size_t idx = f_hash(k) & (map->_capacity - 1);
-    _z_list_t *curr_bucket = map->_vals[idx];
+    size_t idx = INDEX_WRAP(f_hash(key), map->_capacity);
+    _z_hashmap_jr_entry_t *curr_bucket =
+        (void *)_z_ptr_u8_offset((uint8_t *)map->_vals, (ptrdiff_t)(idx * (key_size + val_size)));
 
-    // Check if key already exists
-    _z_hashmap_entry_jr_t e = {._key = k, ._val = NULL};
-    _z_list_t *curr_entry = _z_list_find(curr_bucket, f_equals, &e);
-
-    // Replace value if key exists
-    if (curr_entry != NULL) {
-        _z_hashmap_entry_jr_t *h = (_z_hashmap_entry_jr_t *)_z_list_value(curr_entry);
-        h->_val = v;
-    } else {
-        // Insert the new element
-        _z_hashmap_entry_jr_t *entry = (_z_hashmap_entry_jr_t *)z_malloc(sizeof(_z_hashmap_entry_jr_t));
-        if (entry == NULL) {
-            _Z_ERROR_RETURN(_Z_ERR_SYSTEM_OUT_OF_MEMORY);
+    // Handle collision (linear probing)
+    while (!_z_hashmap_jr_entry_is_empty(curr_bucket, key_size)) {
+        // Check if same key
+        if (f_equals(_z_hashmap_jr_entry_key(curr_bucket), key)) {
+            // Replace value
+            memcpy(_z_hashmap_jr_entry_value(curr_bucket, key_size), val, val_size);
+            return _Z_RES_OK;
         }
-        entry->_key = k;
-        entry->_val = v;
-        map->_vals[idx] = _z_list_push(map->_vals[idx], entry);
-        map->_len++;
+        // Move to next bucket
+        idx = INDEX_WRAP((idx + 1), map->_capacity);
+        curr_bucket = (void *)_z_ptr_u8_offset((uint8_t *)map->_vals, (ptrdiff_t)(idx * (key_size + val_size)));
     }
+    // Insert the new element
+    memcpy(_z_hashmap_jr_entry_key(curr_bucket), key, key_size);
+    memcpy(_z_hashmap_jr_entry_value(curr_bucket, key_size), val, val_size);
+    map->_len++;
     return _Z_RES_OK;
 }
 
-void *_z_hashmap_jr_get(const _z_hashmap_jr_t *map, const void *k, z_element_hash_f f_hash, z_element_eq_f f_equals) {
+void *_z_hashmap_jr_get(const _z_hashmap_jr_t *map, const void *key, z_element_hash_f f_hash, z_element_eq_f f_equals,
+                        size_t key_size, size_t val_size) {
     if (map->_vals == NULL) {
         return NULL;
     }
-    void *ret = NULL;
-    size_t idx = f_hash(k) & (map->_capacity - 1);
+    // Retrieve bucket
+    size_t idx = INDEX_WRAP(f_hash(key), map->_capacity);
+    _z_hashmap_jr_entry_t *curr_bucket =
+        (void *)_z_ptr_u8_offset((uint8_t *)map->_vals, (ptrdiff_t)(idx * (key_size + val_size)));
 
-    _z_hashmap_entry_jr_t e = {._key = (void *)k, ._val = NULL};  // k will not be mutated by this operation
-    _z_list_t *xs = _z_list_find(map->_vals[idx], f_equals, &e);
-    if (xs != NULL) {
-        _z_hashmap_entry_jr_t *h = (_z_hashmap_entry_jr_t *)_z_list_value(xs);
-        ret = h->_val;
+    while (!_z_hashmap_jr_entry_is_empty(curr_bucket, key_size)) {
+        // Check if same key
+        if (f_equals(_z_hashmap_jr_entry_key(curr_bucket), key)) {
+            return _z_hashmap_jr_entry_value(curr_bucket, key_size);
+        }
+        // Move to next bucket
+        idx = INDEX_WRAP((idx + 1), map->_capacity);
+        curr_bucket = (void *)_z_ptr_u8_offset((uint8_t *)map->_vals, (ptrdiff_t)(idx * (key_size + val_size)));
     }
-    return ret;
+    return NULL;
 }
 
-void _z_hashmap_jr_remove(_z_hashmap_jr_t *map, const void *k, z_element_hash_f f_hash, z_element_eq_f f_equals) {
+void _z_hashmap_jr_remove(_z_hashmap_jr_t *map, const void *k, z_element_hash_f f_hash, z_element_eq_f f_equals,
+                          size_t key_size, size_t val_size) {
     if (map->_vals == NULL) {
         return;
     }
-    size_t idx = f_hash(k) & (map->_capacity - 1);
-    _z_hashmap_entry_jr_t e = {._key = (void *)k, ._val = NULL};  // k will not be mutated by this operation
-    size_t curr_len = _z_list_len(map->_vals[idx]);
-    map->_vals[idx] = _z_list_drop_filter(map->_vals[idx], _z_hashmap_jr_elem_free, f_equals, &e);
-    if (curr_len > _z_list_len(map->_vals[idx])) {
-        map->_len--;
+    // Retrieve bucket
+    size_t idx = INDEX_WRAP(f_hash(k), map->_capacity);
+    _z_hashmap_jr_entry_t *curr_bucket =
+        (void *)_z_ptr_u8_offset((uint8_t *)map->_vals, (ptrdiff_t)(idx * (key_size + val_size)));
+
+    while (!_z_hashmap_jr_entry_is_empty(curr_bucket, key_size)) {
+        // Check if same key
+        if (f_equals(_z_hashmap_jr_entry_key(curr_bucket), k)) {
+            // Clear entry
+            memset(curr_bucket, 0xFF, key_size + val_size);
+            map->_len--;
+            // TODO BACKTRACKING: reinsert following entries to avoid search breakage
+            size_t del_idx = idx;
+            while (true) {
+                // Move to next bucket
+                idx = INDEX_WRAP((idx + 1), map->_capacity);
+                curr_bucket = (void *)_z_ptr_u8_offset((uint8_t *)map->_vals, (ptrdiff_t)(idx * (key_size + val_size)));
+                if (_z_hashmap_jr_entry_is_empty(curr_bucket, key_size)) {
+                    break;  // Reached an empty slot
+                }
+                // Reinsert entry
+                void *re_key = _z_hashmap_jr_entry_key(curr_bucket);
+                void *re_val = _z_hashmap_jr_entry_value(curr_bucket, key_size);
+                size_t re_idx = INDEX_WRAP(f_hash(re_key), map->_capacity);
+                // Find new location
+                bool should_move = false;
+                if (idx > del_idx) {
+                    should_move = (re_idx <= del_idx) || (re_idx > idx);
+                } else {
+                    should_move = (re_idx <= del_idx) && (re_idx > idx);
+                }
+                if (should_move) {
+                    // Move entry
+                    _z_hashmap_jr_entry_t *new_bucket =
+                        (void *)_z_ptr_u8_offset((uint8_t *)map->_vals, (ptrdiff_t)(del_idx * (key_size + val_size)));
+                    memcpy(_z_hashmap_jr_entry_key(new_bucket), re_key, key_size);
+                    memcpy(_z_hashmap_jr_entry_value(new_bucket, key_size), re_val, val_size);
+                    // Clear old entry
+                    memset(curr_bucket, 0xFF, key_size + val_size);
+                    del_idx = idx;  // Update the deleted slot index
+                }
+            }
+            return;
+        }
+        // Move to next bucket
+        idx = INDEX_WRAP((idx + 1), map->_capacity);
+        curr_bucket = (void *)_z_ptr_u8_offset((uint8_t *)map->_vals, (ptrdiff_t)(idx * (key_size + val_size)));
     }
 }
 
-void _z_hashmap_jr_clear(_z_hashmap_jr_t *map) {
+void _z_hashmap_jr_clear(_z_hashmap_jr_t *map, size_t key_size, size_t val_size) {
     if (map->_vals == NULL) {
         return;
     }
-    for (size_t idx = 0; idx < map->_capacity; idx++) {
-        _z_list_free(&map->_vals[idx], _z_hashmap_jr_elem_free);
-    }
-    z_free(map->_vals);
-    map->_vals = NULL;
+    memset(map->_vals, 0xFF, map->_capacity * (key_size + val_size));
     map->_len = 0;
 }
 
-void _z_hashmap_jr_delete(_z_hashmap_jr_t *map) {
-    _z_hashmap_jr_clear(map);
-    // z_free(map->_vals);
-    // map->_vals = NULL;
+void _z_hashmap_jr_delete(_z_hashmap_jr_t *map, size_t key_size, size_t val_size) {
+    _z_hashmap_jr_clear(map, key_size, val_size);
+    z_free(map->_vals);
+    map->_vals = NULL;
 }
