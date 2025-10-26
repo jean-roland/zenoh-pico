@@ -20,73 +20,63 @@
 #include <stdint.h>
 
 #include "zenoh-pico/collections/element.h"
-#include "zenoh-pico/collections/list.h"
 #include "zenoh-pico/utils/result.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define _Z_DEFAULT_HASHMAP_JR_CAPACITY 16  // Prime number to reduce collisions
+#define _Z_DEFAULT_HASHMAP_JR_CAPACITY 16  // Must be power of 2
+
+// Hashmap entry struct: {key; value}
+typedef void _z_hashmap_jr_entry_t;
 
 /**
- * A hashmap entry with generic keys.
+ * A hashmap with generic keys. WARNING key ~0 is considered empty and will not be accepted.
  *
  * Members:
- *   void *_key: the key of the entry
- *   void *_val: the value of the entry
- */
-typedef struct {
-    void *_key;
-    void *_val;
-} _z_hashmap_entry_jr_t;
-
-/**
- * A hashmap with generic keys.
- *
- * Members:
- *    size_t _capacity: the number of buckets available in the hashmap
- *   _z_list_t **_vals: the linked list containing the values
- *   z_element_hash_f _f_hash: the hash function used to hash keys
- *   z_element_eq_f _f_equals: the function used to compare keys for equality
+ *   size_t _capacity: the number of buckets available in the hashmap
+ *   size_t _len: the number of entries in the hashmap
+ *   _z_hashmap_jr_entry_t *_vals: the array containing the values
  */
 typedef struct {
     size_t _capacity;
     size_t _len;
-    _z_list_t **_vals;
-    // _z_hashmap_entry_t *_vals;
+    _z_hashmap_jr_entry_t *_vals;
 } _z_hashmap_jr_t;
 
 _z_hashmap_jr_t _z_hashmap_jr_init(size_t capacity);
-z_result_t _z_hashmap_jr_insert(_z_hashmap_jr_t *map, void *k, void *v, z_element_hash_f f_hash,
-                                z_element_eq_f f_equals);
-void *_z_hashmap_jr_get(const _z_hashmap_jr_t *map, const void *k, z_element_hash_f f_hash, z_element_eq_f f_equals);
-void _z_hashmap_jr_remove(_z_hashmap_jr_t *map, const void *k, z_element_hash_f f_hash, z_element_eq_f f_equals);
-void _z_hashmap_jr_clear(_z_hashmap_jr_t *map);
-void _z_hashmap_jr_delete(_z_hashmap_jr_t *map);
+z_result_t _z_hashmap_jr_insert(_z_hashmap_jr_t *map, void *key, void *val, z_element_hash_f f_hash,
+                                z_element_eq_f f_equals, size_t key_size, size_t val_size);
+void *_z_hashmap_jr_get(const _z_hashmap_jr_t *map, const void *key, z_element_hash_f f_hash, z_element_eq_f f_equals,
+                        size_t key_size, size_t val_size);
+void _z_hashmap_jr_remove(_z_hashmap_jr_t *map, const void *k, z_element_hash_f f_hash, z_element_eq_f f_equals,
+                          size_t key_size, size_t val_size);
+void _z_hashmap_jr_clear(_z_hashmap_jr_t *map, size_t key_size, size_t val_size);
+void _z_hashmap_jr_delete(_z_hashmap_jr_t *map, size_t key_size, size_t val_size);
 
-#define _Z_HASHMAP_JR_DEFINE(map_name, key_name, val_name, key_type, val_type)                                 \
-    typedef _z_hashmap_entry_jr_t map_name##_hashmap_entry_t;                                                  \
-    static inline bool map_name##_hashmap_jr_entry_key_eq(const void *left, const void *right) {               \
-        const map_name##_hashmap_entry_t *l = (const map_name##_hashmap_entry_t *)left;                        \
-        const map_name##_hashmap_entry_t *r = (const map_name##_hashmap_entry_t *)right;                       \
-        return key_name##_elem_eq(l->_key, r->_key);                                                           \
-    }                                                                                                          \
-    typedef _z_hashmap_jr_t map_name##_hashmap_t;                                                              \
-    static inline _z_hashmap_jr_t map_name##_hashmap_jr_init(void) {                                           \
-        return _z_hashmap_jr_init(_Z_DEFAULT_HASHMAP_JR_CAPACITY);                                             \
-    }                                                                                                          \
-    static inline z_result_t map_name##_hashmap_jr_insert(map_name##_hashmap_t *m, key_type *k, val_type *v) { \
-        return _z_hashmap_jr_insert(m, k, v, key_name##_elem_hash, map_name##_hashmap_jr_entry_key_eq);        \
-    }                                                                                                          \
-    static inline val_type *map_name##_hashmap_jr_get(const map_name##_hashmap_t *m, const key_type *k) {      \
-        return (val_type *)_z_hashmap_jr_get(m, k, key_name##_elem_hash, map_name##_hashmap_jr_entry_key_eq);  \
-    }                                                                                                          \
-    static inline void map_name##_hashmap_jr_remove(map_name##_hashmap_t *m, const key_type *k) {              \
-        _z_hashmap_jr_remove(m, k, key_name##_elem_hash, map_name##_hashmap_jr_entry_key_eq);                  \
-    }                                                                                                          \
-    static inline void map_name##_hashmap_jr_clear(map_name##_hashmap_t *m) { _z_hashmap_jr_clear(m); }        \
-    static inline void map_name##_hashmap_jr_delete(map_name##_hashmap_t *m) { _z_hashmap_jr_delete(m); }
+#define _Z_HASHMAP_JR_DEFINE(map_name, key_name, val_name, key_type, val_type)                                    \
+    typedef _z_hashmap_jr_t map_name##_hashmap_t;                                                                 \
+    static inline _z_hashmap_jr_t map_name##_hashmap_jr_init(void) {                                              \
+        return _z_hashmap_jr_init(_Z_DEFAULT_HASHMAP_JR_CAPACITY);                                                \
+    }                                                                                                             \
+    static inline z_result_t map_name##_hashmap_jr_insert(map_name##_hashmap_t *m, key_type *k, val_type *v) {    \
+        return _z_hashmap_jr_insert(m, k, v, key_name##_elem_hash, key_name##_elem_eq, sizeof(key_type),          \
+                                    sizeof(val_type));                                                            \
+    }                                                                                                             \
+    static inline val_type *map_name##_hashmap_jr_get(const map_name##_hashmap_t *m, const key_type *k) {         \
+        return (val_type *)_z_hashmap_jr_get(m, k, key_name##_elem_hash, key_name##_elem_eq, sizeof(key_type),    \
+                                             sizeof(val_type));                                                   \
+    }                                                                                                             \
+    static inline void map_name##_hashmap_jr_remove(map_name##_hashmap_t *m, const key_type *k) {                 \
+        _z_hashmap_jr_remove(m, k, key_name##_elem_hash, key_name##_elem_eq, sizeof(key_type), sizeof(val_type)); \
+    }                                                                                                             \
+    static inline void map_name##_hashmap_jr_clear(map_name##_hashmap_t *m) {                                     \
+        _z_hashmap_jr_clear(m, sizeof(key_type), sizeof(val_type));                                               \
+    }                                                                                                             \
+    static inline void map_name##_hashmap_jr_delete(map_name##_hashmap_t *m) {                                    \
+        _z_hashmap_jr_delete(m, sizeof(key_type), sizeof(val_type));                                              \
+    }
 
 #ifdef __cplusplus
 }
