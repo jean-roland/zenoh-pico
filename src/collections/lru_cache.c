@@ -145,9 +145,8 @@ static _z_lru_cache_node_t *_z_lru_cache_search_hlist(_z_lru_cache_t *cache, voi
         return NULL;
     }
     size_t curr_idx = elem_hash(value) % cache->slist_len;
-    size_t try_count = 0;
 
-    while ((cache->slist[curr_idx] != NULL) && (try_count < cache->slist_len)) {
+    while (cache->slist[curr_idx] != NULL) {
         int res = compare(_z_lru_cache_node_value(cache->slist[curr_idx]), value);
         if (res == 0) {
             *idx = curr_idx;
@@ -156,7 +155,6 @@ static _z_lru_cache_node_t *_z_lru_cache_search_hlist(_z_lru_cache_t *cache, voi
             // Linear probing
             curr_idx = incr_wrap_idx(curr_idx, cache->slist_len);
         }
-        try_count++;
     }
     return NULL;  // Not found
 }
