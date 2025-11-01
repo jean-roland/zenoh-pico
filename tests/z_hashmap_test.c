@@ -54,15 +54,17 @@ void test_hashmap_insert(void) {
     assert(res != NULL);
     assert(res->foo == v0.foo);
 
-    _dummy_t data[HMAP_CAPACITY] = {0};
-    _z_string_t keys[HMAP_CAPACITY] = {0};
-    char *key_name[HMAP_CAPACITY] = {"key0", "key1", "key2", "key3", "key4", "key5", "key6", "key7", "key8", "key9"};
-    for (size_t i = 1; i < HMAP_CAPACITY; i++) {
+    _dummy_t data[_Z_DEFAULT_HASHMAP_CAPACITY + 1] = {0};
+    _z_string_t keys[_Z_DEFAULT_HASHMAP_CAPACITY + 1] = {0};
+    char *key_name[_Z_DEFAULT_HASHMAP_CAPACITY + 1] = {"key0",  "key1",  "key2",  "key3",  "key4",  "key5",
+                                                       "key6",  "key7",  "key8",  "key9",  "key10", "key11",
+                                                       "key12", "key13", "key14", "key15", "key16"};
+    for (size_t i = 1; i < _Z_DEFAULT_HASHMAP_CAPACITY + 1; i++) {
         keys[i] = _z_string_alias_str(key_name[i]);
         data[i].foo = (int)i;
         assert(test_hashmap_jr_insert(&hmap, &keys[i], &data[i]) == _Z_RES_OK);
     }
-    for (size_t i = 1; i < HMAP_CAPACITY; i++) {
+    for (size_t i = 1; i < _Z_DEFAULT_HASHMAP_CAPACITY + 1; i++) {
         res = test_hashmap_jr_get(&hmap, &keys[i]);
         assert(res != NULL);
         assert(res->foo == data[i].foo);
@@ -117,7 +119,7 @@ void test_hashmap_remove(void) {
     test_hashmap_jr_delete(&hmap);
 }
 
-#if 1
+#if 0
 #define BENCH_THRESHOLD 10000000
 
 #define LCG_A 1664525
@@ -185,7 +187,9 @@ void test_op_benchmark(size_t capacity) {
         size_t key_idx = (size_t)rand() % capacity;
         _dummy_t *res = test_hashmap_jr_get(&hmap, &keys[key_idx]);
         if (res == NULL)
-            printf("Key not found! %ld '%.*s'\n", key_idx, (int)keys[key_idx]._slice.len, (char *)keys[key_idx]._slice.start);
+            printf("Key not found! %ld %ld '%.*s'\n", capacity, key_idx, (int)keys[key_idx]._slice.len,
+                   (char *)keys[key_idx]._slice.start);
+        fflush(stdout);
         assert(res != NULL);
     }
     elapsed_us = z_clock_elapsed_us(&measure_start);
@@ -231,7 +235,7 @@ int main(void) {
     test_hashmap_insert();
     test_hashmap_clear();
     test_hashmap_remove();
-#if 1
+#if 0
     test_benchmark();
 #endif
     return 0;
