@@ -20,9 +20,8 @@
 #include "zenoh-pico/utils/logging.h"
 #include "zenoh-pico/utils/pointers.h"
 
-#define EXPAND_LOAD_FACTOR 8  // 8/10th to avoid float
+#define EXPAND_LOAD_FACTOR 9  // 9/10th to avoid float
 #define INDEX_WRAP(idx, capacity) ((idx) & (capacity - 1))
-// #define INDEX_WRAP(idx, capacity) ((idx) % (capacity ))
 
 static inline void *_z_hashmap_jr_entry_key(_z_hashmap_jr_entry_t *entry) { return (void *)entry; }
 
@@ -42,8 +41,8 @@ static inline bool _z_hashmap_jr_entry_is_empty(_z_hashmap_jr_entry_t *entry, si
     return true;
 }
 
-
-static inline z_result_t _z_hashmap_jr_expand(_z_hashmap_jr_t *map, z_element_hash_f f_hash, z_element_eq_f f_equals, size_t key_size, size_t val_size) {
+static inline z_result_t _z_hashmap_jr_expand(_z_hashmap_jr_t *map, z_element_hash_f f_hash, z_element_eq_f f_equals,
+                                              size_t key_size, size_t val_size) {
     // Expand table if load factor exceeded
     size_t old_capacity = map->_capacity;
     _z_hashmap_jr_entry_t *old_vals = map->_vals;
@@ -68,8 +67,7 @@ static inline z_result_t _z_hashmap_jr_expand(_z_hashmap_jr_t *map, z_element_ha
         // Reinsert entry
         void *re_key = _z_hashmap_jr_entry_key(old_entry);
         void *re_val = _z_hashmap_jr_entry_value(old_entry, key_size);
-        _z_hashmap_jr_insert(map, re_key, re_val, f_hash,
-                                f_equals, key_size, val_size);
+        _z_hashmap_jr_insert(map, re_key, re_val, f_hash, f_equals, key_size, val_size);
     }
     z_free(old_vals);
     return _Z_RES_OK;
@@ -159,7 +157,7 @@ void _z_hashmap_jr_remove(_z_hashmap_jr_t *map, const void *k, z_element_hash_f 
             // Clear entry
             memset(curr_bucket, 0xFF, key_size + val_size);
             map->_len--;
-            // TODO BACKTRACKING: reinsert following entries to avoid search breakage
+            // Reinsert following entries to avoid search breakage
             size_t del_idx = idx;
             while (true) {
                 // Move to next bucket
@@ -169,9 +167,7 @@ void _z_hashmap_jr_remove(_z_hashmap_jr_t *map, const void *k, z_element_hash_f 
                     break;  // Reached an empty slot
                 }
                 // Reinsert entry
-                void *re_key = _z_hashmap_jr_entry_key(curr_bucket);
-                void *re_val = _z_hashmap_jr_entry_value(curr_bucket, key_size);
-                size_t re_idx = INDEX_WRAP(f_hash(re_key), map->_capacity);
+                size_t re_idx = INDEX_WRAP(f_hash(_z_hashmap_jr_entry_key(curr_bucket)), map->_capacity);
                 // Find new location
                 bool should_move = false;
                 if (idx > del_idx) {
@@ -183,8 +179,8 @@ void _z_hashmap_jr_remove(_z_hashmap_jr_t *map, const void *k, z_element_hash_f 
                     // Move entry
                     _z_hashmap_jr_entry_t *new_bucket =
                         (void *)_z_ptr_u8_offset((uint8_t *)map->_vals, (ptrdiff_t)(del_idx * (key_size + val_size)));
-                    memcpy(_z_hashmap_jr_entry_key(new_bucket), re_key, key_size);
-                    memcpy(_z_hashmap_jr_entry_value(new_bucket, key_size), re_val, val_size);
+                    memcpy(_z_hashmap_jr_entry_key(new_bucket), _z_hashmap_jr_entry_key(curr_bucket),
+                           key_size + val_size);
                     // Clear old entry
                     memset(curr_bucket, 0xFF, key_size + val_size);
                     del_idx = idx;  // Update the deleted slot index
@@ -207,7 +203,10 @@ void _z_hashmap_jr_clear(_z_hashmap_jr_t *map, size_t key_size, size_t val_size)
 }
 
 void _z_hashmap_jr_delete(_z_hashmap_jr_t *map, size_t key_size, size_t val_size) {
-    _z_hashmap_jr_clear(map, key_size, val_size);
+    if (map->_vals == NULL) {
+        return;
+    }
+    map->_len = 0;
     z_free(map->_vals);
     map->_vals = NULL;
 }
