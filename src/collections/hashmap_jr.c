@@ -12,15 +12,16 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+#include "zenoh-pico/collections/hashmap_jr.h"
+
 #include <assert.h>
 #include <stddef.h>
 #include <string.h>
 
-#include "zenoh-pico/collections/jr_hashmap.h"
 #include "zenoh-pico/utils/logging.h"
 #include "zenoh-pico/utils/pointers.h"
 
-#define EXPAND_LOAD_FACTOR 9  // 9/10th to avoid float
+#define EXPAND_LOAD_FACTOR 9  // Expand at 90% load
 #define INDEX_WRAP(idx, capacity) ((idx) & (capacity - 1))
 
 static inline void *_z_hashmap_jr_entry_key(_z_hashmap_jr_entry_t *entry) { return (void *)entry; }
@@ -202,7 +203,7 @@ void _z_hashmap_jr_clear(_z_hashmap_jr_t *map, size_t key_size, size_t val_size)
     map->_len = 0;
 }
 
-void _z_hashmap_jr_delete(_z_hashmap_jr_t *map, size_t key_size, size_t val_size) {
+void _z_hashmap_jr_delete(_z_hashmap_jr_t *map) {
     if (map->_vals == NULL) {
         return;
     }

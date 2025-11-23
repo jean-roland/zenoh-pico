@@ -17,7 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "zenoh-pico/collections/jr_hashmap.h"
+#include "zenoh-pico/collections/hashmap_jr.h"
 #include "zenoh-pico/collections/list.h"
 #include "zenoh-pico/collections/string.h"
 #include "zenoh-pico/system/common/platform.h"

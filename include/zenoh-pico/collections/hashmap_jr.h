@@ -53,7 +53,7 @@ void *_z_hashmap_jr_get(const _z_hashmap_jr_t *map, const void *key, z_element_h
 void _z_hashmap_jr_remove(_z_hashmap_jr_t *map, const void *k, z_element_hash_f f_hash, z_element_eq_f f_equals,
                           size_t key_size, size_t val_size);
 void _z_hashmap_jr_clear(_z_hashmap_jr_t *map, size_t key_size, size_t val_size);
-void _z_hashmap_jr_delete(_z_hashmap_jr_t *map, size_t key_size, size_t val_size);
+void _z_hashmap_jr_delete(_z_hashmap_jr_t *map);
 
 #define _Z_HASHMAP_JR_DEFINE(map_name, key_name, val_name, key_type, val_type)                                    \
     typedef _z_hashmap_jr_t map_name##_hashmap_t;                                                                 \
@@ -74,9 +74,7 @@ void _z_hashmap_jr_delete(_z_hashmap_jr_t *map, size_t key_size, size_t val_size
     static inline void map_name##_hashmap_jr_clear(map_name##_hashmap_t *m) {                                     \
         _z_hashmap_jr_clear(m, sizeof(key_type), sizeof(val_type));                                               \
     }                                                                                                             \
-    static inline void map_name##_hashmap_jr_delete(map_name##_hashmap_t *m) {                                    \
-        _z_hashmap_jr_delete(m, sizeof(key_type), sizeof(val_type));                                              \
-    }
+    static inline void map_name##_hashmap_jr_delete(map_name##_hashmap_t *m) { _z_hashmap_jr_delete(m); }
 
 #ifdef __cplusplus
 }
