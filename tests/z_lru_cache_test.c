@@ -107,9 +107,9 @@ void test_lru_cache_clear(void) {
 
 void test_lru_cache_deletion(void) {
     _dummy_lru_cache_t dcache = _dummy_lru_cache_init(CACHE_CAPACITY);
-
     _dummy_t data[CACHE_CAPACITY + 1] = {0};
     for (size_t i = 0; i < CACHE_CAPACITY + 1; i++) {
+        // printf("Inserting %ld\n", i);
         data[i].foo = (int)i;
         assert(_dummy_lru_cache_insert(&dcache, &data[i]) == 0);
     }

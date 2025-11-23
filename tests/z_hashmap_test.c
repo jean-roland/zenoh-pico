@@ -31,8 +31,6 @@ typedef struct _dummy_t {
     int foo;
 } _dummy_t;
 
-static inline void _dummy_elem_clear(void *e) { _z_noop_clear(e); }
-
 _Z_HASHMAP_JR_DEFINE(test, _z_string, _dummy, _z_string_t, _dummy_t)
 
 void test_hashmap_init(void) {
