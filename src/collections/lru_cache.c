@@ -128,8 +128,8 @@ static inline size_t incr_wrap_idx(size_t idx, size_t max) {
     return idx;
 }
 
-static inline bool _z_lru_cache_hlist_entry_is_empty(_z_lru_cache_node_t *entry, size_t val_size) {
-    uint8_t *bytes = (uint8_t *)_z_lru_cache_node_value(entry);
+static inline bool _z_lru_cache_value_is_empty(const void *value, size_t val_size) {
+    const uint8_t *bytes = (const uint8_t *)value;
     for (size_t i = 0; i < val_size; i++) {
         if (bytes[i] != 0xFF) {
             return false;
@@ -147,7 +147,7 @@ static _z_lru_cache_node_t *_z_lru_cache_search_hlist(_z_lru_cache_t *cache, voi
     _z_lru_cache_node_t *curr_node =
         (void *)_z_ptr_u8_offset((uint8_t *)cache->slist, (ptrdiff_t)(curr_idx * (val_size + NODE_DATA_SIZE)));
 
-    while (!_z_lru_cache_hlist_entry_is_empty(curr_node, val_size)) {
+    while (!_z_lru_cache_value_is_empty(_z_lru_cache_node_value(curr_node), val_size)) {
         int res = compare(_z_lru_cache_node_value(curr_node), value);
         if (res == 0) {
             *idx = curr_idx;
@@ -169,7 +169,7 @@ static void _z_lru_cache_insert_hlist(_z_lru_cache_t *cache, _z_lru_cache_node_t
     size_t curr_idx = elem_hash(value) % cache->slist_len;
     _z_lru_cache_node_t *curr_node =
         (void *)_z_ptr_u8_offset((uint8_t *)cache->slist, (ptrdiff_t)(curr_idx * (val_size + NODE_DATA_SIZE)));
-    while (!_z_lru_cache_hlist_entry_is_empty(curr_node, val_size)) {
+    while (!_z_lru_cache_value_is_empty(_z_lru_cache_node_value(curr_node), val_size)) {
         // Linear probing
         curr_idx = incr_wrap_idx(curr_idx, cache->slist_len);
         curr_node =
@@ -202,7 +202,7 @@ static void _z_lru_cache_delete_hlist(_z_lru_cache_t *cache, _z_lru_cache_node_t
         // Get the node at the current index
         _z_lru_cache_node_t *current_node =
             (void *)_z_ptr_u8_offset((uint8_t *)cache->slist, (ptrdiff_t)(idx * (val_size + NODE_DATA_SIZE)));
-        if (_z_lru_cache_hlist_entry_is_empty(current_node, val_size)) {
+        if (_z_lru_cache_value_is_empty(_z_lru_cache_node_value(current_node), val_size)) {
             break;  // Reached an empty slot
         }
         size_t ideal_idx = elem_hash(_z_lru_cache_node_value(current_node)) % cache->slist_len;
@@ -274,6 +274,8 @@ void *_z_lru_cache_get(_z_lru_cache_t *cache, void *value, _z_lru_val_cmp_f comp
 z_result_t _z_lru_cache_insert(_z_lru_cache_t *cache, void *value, size_t value_size, _z_lru_val_cmp_f compare,
                                z_element_hash_f elem_hash, z_element_clear_f elem_clear) {
     assert(cache->capacity > 0);
+    assert(!_z_lru_cache_value_is_empty(value, value_size));
+
     // Init slist
     if (cache->slist == NULL) {
         cache->slist = (_z_lru_cache_node_t *)z_malloc(cache->slist_len * (value_size + NODE_DATA_SIZE));

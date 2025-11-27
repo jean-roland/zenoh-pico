@@ -31,16 +31,18 @@ typedef struct _dummy_t {
     int foo;
 } _dummy_t;
 
+static inline void _dummy_elem_clear(void *e) { _z_noop_clear((_dummy_t *)e); }
+
 _Z_HASHMAP_JR_DEFINE(test, _z_string, _dummy, _z_string_t, _dummy_t)
 
 void test_hashmap_init(void) {
-    test_hashmap_t hmap = test_hashmap_jr_init();
+    test_hashmap_t hmap = test_hashmap_jr_init(0, true);
     assert(hmap._capacity == _Z_DEFAULT_HASHMAP_JR_CAPACITY);
     assert(hmap._vals == NULL);
 }
 
 void test_hashmap_insert(void) {
-    test_hashmap_t hmap = test_hashmap_jr_init();
+    test_hashmap_t hmap = test_hashmap_jr_init(0, true);
 
     _z_string_t k0 = _z_string_alias_str("key0");
     _dummy_t v0 = {0};
@@ -71,7 +73,7 @@ void test_hashmap_insert(void) {
 }
 
 void test_hashmap_clear(void) {
-    test_hashmap_t hmap = test_hashmap_jr_init();
+    test_hashmap_t hmap = test_hashmap_jr_init(0, true);
 
     _dummy_t data[HMAP_CAPACITY] = {0};
     _z_string_t keys[HMAP_CAPACITY] = {0};
@@ -91,7 +93,7 @@ void test_hashmap_clear(void) {
 }
 
 void test_hashmap_remove(void) {
-    test_hashmap_t hmap = test_hashmap_jr_init();
+    test_hashmap_t hmap = test_hashmap_jr_init(0, true);
 
     _dummy_t data[HMAP_CAPACITY] = {0};
     _z_string_t keys[HMAP_CAPACITY] = {0};
@@ -148,7 +150,7 @@ void generate_kv(_z_string_t *key, _dummy_t *val, lcg_state *state, size_t len) 
 }
 
 void test_op_benchmark(size_t capacity) {
-    test_hashmap_t hmap = test_hashmap_jr_init();
+    test_hashmap_t hmap = test_hashmap_jr_init(0, true);
     _dummy_t *data = (_dummy_t *)malloc(capacity * sizeof(_dummy_t));
     _z_string_t *keys = (_z_string_t *)malloc(capacity * sizeof(_z_string_t));
     _z_string_t *bad_keys = (_z_string_t *)malloc(capacity * sizeof(_z_string_t));
@@ -175,7 +177,8 @@ void test_op_benchmark(size_t capacity) {
     // Insert data
     z_clock_t measure_start = z_clock_now();
     for (size_t i = 0; i < capacity; i++) {
-        assert(test_hashmap_jr_insert(&hmap, &keys[i], &data[i]) == _Z_RES_OK);
+        _z_string_t curr_key = _z_string_alias(keys[i]);
+        assert(test_hashmap_jr_insert(&hmap, &curr_key, &data[i]) == _Z_RES_OK);
     }
     unsigned long elapsed_us = z_clock_elapsed_us(&measure_start);
     printf("%ld\n", elapsed_us);

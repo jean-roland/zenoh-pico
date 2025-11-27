@@ -74,9 +74,15 @@ static inline z_result_t _z_hashmap_jr_expand(_z_hashmap_jr_t *map, z_element_ha
     return _Z_RES_OK;
 }
 
-_z_hashmap_jr_t _z_hashmap_jr_init(size_t capacity) {
+_z_hashmap_jr_t _z_hashmap_jr_init(size_t capacity, bool resizable) {
     _z_hashmap_jr_t map = _z_hashmap_jr_null();
-    map._capacity = capacity;
+
+    if ((capacity == 0) || (capacity % 2 != 0)) {
+        map._capacity = _Z_DEFAULT_HASHMAP_JR_CAPACITY;
+    } else {
+        map._capacity = capacity;
+    }
+    map.resizable = resizable;
     return map;
 }
 
@@ -94,7 +100,11 @@ z_result_t _z_hashmap_jr_insert(_z_hashmap_jr_t *map, void *key, void *val, z_el
         }
         (void)memset(map->_vals, 0xff, map_size);
     } else if (map->_len * 10 >= map->_capacity * EXPAND_LOAD_FACTOR) {
-        _Z_RETURN_IF_ERR(_z_hashmap_jr_expand(map, f_hash, f_equals, key_size, val_size));
+        if (map->resizable) {
+            _Z_RETURN_IF_ERR(_z_hashmap_jr_expand(map, f_hash, f_equals, key_size, val_size));
+        } else if (map->_len == map->_capacity) {
+            _Z_ERROR_RETURN(_Z_ERR_OVERFLOW);
+        }
     }
     // Retrieve bucket
     size_t idx = INDEX_WRAP(f_hash(key), map->_capacity);
@@ -143,7 +153,8 @@ void *_z_hashmap_jr_get(const _z_hashmap_jr_t *map, const void *key, z_element_h
 }
 
 void _z_hashmap_jr_remove(_z_hashmap_jr_t *map, const void *k, z_element_hash_f f_hash, z_element_eq_f f_equals,
-                          size_t key_size, size_t val_size) {
+                          z_element_clear_f key_f_clear, z_element_clear_f val_f_clear, size_t key_size,
+                          size_t val_size) {
     if (map->_vals == NULL) {
         return;
     }
@@ -156,6 +167,8 @@ void _z_hashmap_jr_remove(_z_hashmap_jr_t *map, const void *k, z_element_hash_f 
         // Check if same key
         if (f_equals(_z_hashmap_jr_entry_key(curr_bucket), k)) {
             // Clear entry
+            key_f_clear(_z_hashmap_jr_entry_key(curr_bucket));
+            val_f_clear(_z_hashmap_jr_entry_value(curr_bucket, key_size));
             memset(curr_bucket, 0xFF, key_size + val_size);
             map->_len--;
             // Reinsert following entries to avoid search breakage
@@ -195,9 +208,18 @@ void _z_hashmap_jr_remove(_z_hashmap_jr_t *map, const void *k, z_element_hash_f 
     }
 }
 
-void _z_hashmap_jr_clear(_z_hashmap_jr_t *map, size_t key_size, size_t val_size) {
+void _z_hashmap_jr_clear(_z_hashmap_jr_t *map, z_element_clear_f key_f_clear, z_element_clear_f val_f_clear,
+                         size_t key_size, size_t val_size) {
     if (map->_vals == NULL) {
         return;
+    }
+    for (size_t idx = 0; idx < map->_capacity; idx++) {
+        _z_hashmap_jr_entry_t *curr_entry =
+            (void *)_z_ptr_u8_offset((uint8_t *)map->_vals, (ptrdiff_t)(idx * (key_size + val_size)));
+        if (!_z_hashmap_jr_entry_is_empty(curr_entry, key_size)) {
+            key_f_clear(_z_hashmap_jr_entry_key(curr_entry));
+            val_f_clear(_z_hashmap_jr_entry_value(curr_entry, key_size));
+        }
     }
     memset(map->_vals, 0xFF, map->_capacity * (key_size + val_size));
     map->_len = 0;

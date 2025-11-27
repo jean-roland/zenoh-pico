@@ -31,9 +31,15 @@ typedef int (*_z_lru_val_cmp_f)(const void *first, const void *second);
 // Node struct: {node_data; generic type}
 typedef void _z_lru_cache_node_t;
 
-/*-------- Dynamically allocated vector --------*/
 /**
- * A least recently used cache implementation
+ * A least recently used cache implementation. WARNING key ~0 is considered empty and will not be accepted.
+ * Members:
+ *   size_t capacity: max number of entries in the cache
+ *   size_t len: current number of entries in the cache
+ *   size_t slist_len: size of the underlying container
+ *  _z_lru_cache_node_t *head: pointer to the most recently used node
+ *  _z_lru_cache_node_t *tail: pointer to the least recently used node
+ *  _z_lru_cache_node_t *slist: pointer to the underlying container
  */
 typedef struct _z_lru_cache_t {
     size_t capacity;             // Max number of node
