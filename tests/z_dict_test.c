@@ -17,7 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "zenoh-pico/collections/hashmap_jr.h"
+#include "zenoh-pico/collections/dict.h"
 #include "zenoh-pico/collections/list.h"
 #include "zenoh-pico/collections/string.h"
 #include "zenoh-pico/system/common/platform.h"
@@ -33,24 +33,24 @@ typedef struct _dummy_t {
 
 static inline void _dummy_elem_clear(void *e) { _z_noop_clear((_dummy_t *)e); }
 
-_Z_HASHMAP_JR_DEFINE(test, _z_string, _dummy, _z_string_t, _dummy_t)
+_Z_dict_DEFINE(test, _z_string, _dummy, _z_string_t, _dummy_t)
 
-void test_hashmap_init(void) {
-    test_hashmap_t hmap = test_hashmap_jr_init(0, true);
-    assert(hmap._capacity == _Z_DEFAULT_HASHMAP_JR_CAPACITY);
+    void test_hashmap_init(void) {
+    test_hashmap_t hmap = test_dict_init(0, true);
+    assert(hmap._capacity == _Z_DEFAULT_dict_CAPACITY);
     assert(hmap._vals == NULL);
 }
 
 void test_hashmap_insert(void) {
-    test_hashmap_t hmap = test_hashmap_jr_init(0, true);
+    test_hashmap_t hmap = test_dict_init(0, true);
 
     _z_string_t k0 = _z_string_alias_str("key0");
     _dummy_t v0 = {0};
     assert(hmap._vals == NULL);
-    assert(test_hashmap_jr_get(&hmap, &k0) == NULL);
-    assert(test_hashmap_jr_insert(&hmap, &k0, &v0) == _Z_RES_OK);
+    assert(test_dict_get(&hmap, &k0) == NULL);
+    assert(test_dict_insert(&hmap, &k0, &v0) == _Z_RES_OK);
     assert(hmap._vals != NULL);
-    _dummy_t *res = test_hashmap_jr_get(&hmap, &k0);
+    _dummy_t *res = test_dict_get(&hmap, &k0);
     assert(res != NULL);
     assert(res->foo == v0.foo);
 
@@ -62,18 +62,18 @@ void test_hashmap_insert(void) {
     for (size_t i = 1; i < _Z_DEFAULT_HASHMAP_CAPACITY + 1; i++) {
         keys[i] = _z_string_alias_str(key_name[i]);
         data[i].foo = (int)i;
-        assert(test_hashmap_jr_insert(&hmap, &keys[i], &data[i]) == _Z_RES_OK);
+        assert(test_dict_insert(&hmap, &keys[i], &data[i]) == _Z_RES_OK);
     }
     for (size_t i = 1; i < _Z_DEFAULT_HASHMAP_CAPACITY + 1; i++) {
-        res = test_hashmap_jr_get(&hmap, &keys[i]);
+        res = test_dict_get(&hmap, &keys[i]);
         assert(res != NULL);
         assert(res->foo == data[i].foo);
     }
-    test_hashmap_jr_delete(&hmap);
+    test_dict_delete(&hmap);
 }
 
 void test_hashmap_clear(void) {
-    test_hashmap_t hmap = test_hashmap_jr_init(0, true);
+    test_hashmap_t hmap = test_dict_init(0, true);
 
     _dummy_t data[HMAP_CAPACITY] = {0};
     _z_string_t keys[HMAP_CAPACITY] = {0};
@@ -81,19 +81,19 @@ void test_hashmap_clear(void) {
     for (size_t i = 0; i < HMAP_CAPACITY; i++) {
         data[i].foo = (int)i;
         keys[i] = _z_string_alias_str(key_name[i]);
-        assert(test_hashmap_jr_insert(&hmap, &keys[i], &data[i]) == _Z_RES_OK);
+        assert(test_dict_insert(&hmap, &keys[i], &data[i]) == _Z_RES_OK);
     }
-    test_hashmap_jr_clear(&hmap);
-    assert(hmap._capacity == _Z_DEFAULT_HASHMAP_JR_CAPACITY);
+    test_dict_clear(&hmap);
+    assert(hmap._capacity == _Z_DEFAULT_dict_CAPACITY);
     assert(hmap._len == 0);
     for (size_t i = 0; i < HMAP_CAPACITY; i++) {
-        assert(test_hashmap_jr_get(&hmap, &keys[i]) == NULL);
+        assert(test_dict_get(&hmap, &keys[i]) == NULL);
     }
-    test_hashmap_jr_delete(&hmap);
+    test_dict_delete(&hmap);
 }
 
 void test_hashmap_remove(void) {
-    test_hashmap_t hmap = test_hashmap_jr_init(0, true);
+    test_hashmap_t hmap = test_dict_init(0, true);
 
     _dummy_t data[HMAP_CAPACITY] = {0};
     _z_string_t keys[HMAP_CAPACITY] = {0};
@@ -103,20 +103,20 @@ void test_hashmap_remove(void) {
     for (size_t i = 0; i < HMAP_CAPACITY; i++) {
         keys[i] = _z_string_alias_str(key_name[i]);
         data[i].foo = (int)i;
-        assert(test_hashmap_jr_insert(&hmap, &keys[i], &data[i]) == _Z_RES_OK);
+        assert(test_dict_insert(&hmap, &keys[i], &data[i]) == _Z_RES_OK);
     }
     // Remove value and check
-    test_hashmap_jr_remove(&hmap, &keys[0]);
-    assert(test_hashmap_jr_get(&hmap, &keys[0]) == NULL);
+    test_dict_remove(&hmap, &keys[0]);
+    assert(test_dict_get(&hmap, &keys[0]) == NULL);
     assert(hmap._len == HMAP_CAPACITY - 1);
 
     // Check remaining values
     for (size_t i = 1; i < HMAP_CAPACITY; i++) {
-        _dummy_t *res = test_hashmap_jr_get(&hmap, &keys[i]);
+        _dummy_t *res = test_dict_get(&hmap, &keys[i]);
         assert(res != NULL);
         assert(res->foo == data[i].foo);
     }
-    test_hashmap_jr_delete(&hmap);
+    test_dict_delete(&hmap);
 }
 
 #if 0
@@ -150,7 +150,7 @@ void generate_kv(_z_string_t *key, _dummy_t *val, lcg_state *state, size_t len) 
 }
 
 void test_op_benchmark(size_t capacity) {
-    test_hashmap_t hmap = test_hashmap_jr_init(0, true);
+    test_hashmap_t hmap = test_dict_init(0, true);
     _dummy_t *data = (_dummy_t *)malloc(capacity * sizeof(_dummy_t));
     _z_string_t *keys = (_z_string_t *)malloc(capacity * sizeof(_z_string_t));
     _z_string_t *bad_keys = (_z_string_t *)malloc(capacity * sizeof(_z_string_t));
@@ -178,7 +178,7 @@ void test_op_benchmark(size_t capacity) {
     z_clock_t measure_start = z_clock_now();
     for (size_t i = 0; i < capacity; i++) {
         _z_string_t curr_key = _z_string_alias(keys[i]);
-        assert(test_hashmap_jr_insert(&hmap, &curr_key, &data[i]) == _Z_RES_OK);
+        assert(test_dict_insert(&hmap, &curr_key, &data[i]) == _Z_RES_OK);
     }
     unsigned long elapsed_us = z_clock_elapsed_us(&measure_start);
     printf("%ld\n", elapsed_us);
@@ -186,7 +186,7 @@ void test_op_benchmark(size_t capacity) {
     measure_start = z_clock_now();
     for (size_t get_cnt = 0; get_cnt <= BENCH_THRESHOLD; get_cnt++) {
         size_t key_idx = (size_t)rand() % capacity;
-        _dummy_t *res = test_hashmap_jr_get(&hmap, &keys[key_idx]);
+        _dummy_t *res = test_dict_get(&hmap, &keys[key_idx]);
         if (res == NULL)
             printf("Key not found! %ld %ld '%.*s'\n", capacity, key_idx, (int)keys[key_idx]._slice.len,
                    (char *)keys[key_idx]._slice.start);
@@ -200,7 +200,7 @@ void test_op_benchmark(size_t capacity) {
     measure_start = z_clock_now();
     for (size_t get_cnt = 0; get_cnt <= BENCH_THRESHOLD; get_cnt++) {
         size_t key_idx = (size_t)rand() % capacity;
-        _dummy_t *res = test_hashmap_jr_get(&hmap, &bad_keys[key_idx]);
+        _dummy_t *res = test_dict_get(&hmap, &bad_keys[key_idx]);
         assert(res == NULL);  // Ensure the key doesn't exist
     }
     elapsed_us = z_clock_elapsed_us(&measure_start);
@@ -210,12 +210,12 @@ void test_op_benchmark(size_t capacity) {
     measure_start = z_clock_now();
     for (size_t get_cnt = 0; get_cnt <= BENCH_THRESHOLD; get_cnt++) {
         size_t key_idx = (size_t)rand() % capacity;
-        test_hashmap_jr_remove(&hmap, &keys[key_idx]);
+        test_dict_remove(&hmap, &keys[key_idx]);
     }
     elapsed_us = z_clock_elapsed_us(&measure_start);
     printf("%ld\n", elapsed_us);
     free(data);
-    test_hashmap_jr_delete(&hmap);
+    test_dict_delete(&hmap);
     for (size_t i = 0; i < capacity; i++) {
         _z_string_clear(&keys[i]);
         _z_string_clear(&bad_keys[i]);
