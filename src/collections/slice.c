@@ -147,3 +147,123 @@ bool _z_slice_eq(const _z_slice_t *left, const _z_slice_t *right) {
 }
 
 bool _z_slice_is_alloced(const _z_slice_t *s) { return !_z_delete_context_is_null(&s->_delete_context); }
+
+/*-------- QSlice --------*/
+z_result_t _z_qslice_init(_z_qslice_t *bs, size_t capacity) {
+    assert(bs != NULL);
+    if (capacity == 0) {
+        *bs = _z_qslice_null();
+        return _Z_RES_OK;
+    }
+    bs->start = (uint8_t *)z_malloc(capacity);
+    if (bs->start == NULL) {
+        bs->len = 0;
+        bs->_is_alloced = false;
+        _Z_ERROR_RETURN(_Z_ERR_SYSTEM_OUT_OF_MEMORY);
+    }
+    bs->len = capacity;
+    bs->_is_alloced = true;
+    return _Z_RES_OK;
+}
+
+_z_qslice_t _z_qslice_make(size_t capacity) {
+    _z_qslice_t bs;
+    (void)_z_qslice_init(&bs, capacity);
+    return bs;
+}
+
+_z_qslice_t _z_qslice_copy_from_buf(const uint8_t *p, size_t len) {
+    if (len == 0) {
+        return _z_qslice_null();
+    }
+    _z_qslice_t bs = _z_qslice_alias_buf(p, len);
+    return _z_qslice_duplicate(&bs);
+}
+
+void _z_qslice_free(_z_qslice_t **bs) {
+    _z_qslice_t *ptr = *bs;
+
+    if (ptr != NULL) {
+        _z_qslice_clear(ptr);
+        z_free(ptr);
+        *bs = NULL;
+    }
+}
+
+z_result_t _z_qslice_copy(_z_qslice_t *dst, const _z_qslice_t *src) {
+    assert(src != NULL);
+    assert(src->len == 0 || src->start != NULL);
+    if (src->len == 0) {
+        *dst = _z_qslice_null();
+        return _Z_RES_OK;
+    }
+    // Make sure dst slice is not init beforehand, or suffer memory leak
+    z_result_t ret = _z_qslice_init(dst, src->len);
+    if (ret == _Z_RES_OK) {
+        (void)memcpy((uint8_t *)dst->start, src->start, src->len);
+    }
+    return ret;
+}
+
+z_result_t _z_qslice_n_copy(_z_qslice_t *dst, const _z_qslice_t *src, size_t offset, size_t len) {
+    assert(offset + len <= src->len);
+    if (len == 0) {
+        *dst = _z_qslice_null();
+        return _Z_RES_OK;
+    }
+    // Make sure dst slice is not init beforehand, or suffer memory leak
+    z_result_t ret = _z_qslice_init(dst, len);
+    if (ret == _Z_RES_OK) {
+        const uint8_t *start = _z_cptr_u8_offset(src->start, (ptrdiff_t)offset);
+        (void)memcpy((uint8_t *)dst->start, start, len);
+    }
+    return ret;
+}
+
+z_result_t _z_qslice_move(_z_qslice_t *dst, _z_qslice_t *src) {
+    // Avoid moving aliased slices
+    if (!src->_is_alloced) {
+        *dst = _z_qslice_null();
+        _z_qslice_t csrc;
+        _Z_RETURN_IF_ERR(_z_qslice_copy(&csrc, src));
+        *src = csrc;
+    }
+    *dst = *src;
+    *src = _z_qslice_null();
+    return _Z_RES_OK;
+}
+
+_z_qslice_t _z_qslice_duplicate(const _z_qslice_t *src) {
+    _z_qslice_t dst = _z_qslice_null();
+    _z_qslice_copy(&dst, src);
+    return dst;
+}
+
+_z_qslice_t _z_qslice_steal(_z_qslice_t *b) {
+    _z_qslice_t ret = *b;
+    *b = _z_qslice_null();
+    return ret;
+}
+bool _z_qslice_eq(const _z_qslice_t *left, const _z_qslice_t *right) {
+    assert(left != NULL);
+    assert(right != NULL);
+    if (left->len != right->len) {
+        return false;
+    }
+    if (left->len == 0) {
+        return true;
+    }
+    assert(left->start != NULL);
+    assert(right->start != NULL);
+    return memcmp(left->start, right->start, left->len) == 0;
+}
+
+void _z_qslice_clear(_z_qslice_t *bs) {
+    if (bs->start != NULL) {
+        if (bs->_is_alloced) {
+            z_free((void *)bs->start);
+        }
+        bs->len = 0;
+        bs->start = NULL;
+    }
+}

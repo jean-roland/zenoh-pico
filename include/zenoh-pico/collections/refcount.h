@@ -166,7 +166,7 @@ size_t _z_simple_rc_strong_count(void *rc);
         _ZP_UNUSED(p);                                                                                               \
         return sizeof(name##_rc_t);                                                                                  \
     }                                                                                                                \
-    static inline name##_t *name##_weak_as_unsafe_ptr(name##_weak_t *p) { return p->_val; }
+    static inline name##_t *name##_weak_as_unsafe_ptr(const name##_weak_t *p) { return p->_val; }
 
 typedef void _z_void_t;
 typedef void (*_z_void_rc_deleter)(void *);

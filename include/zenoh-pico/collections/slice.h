@@ -104,6 +104,84 @@ bool _z_slice_eq(const _z_slice_t *left, const _z_slice_t *right);
 void _z_slice_free(_z_slice_t **bs);
 bool _z_slice_is_alloced(const _z_slice_t *s);
 
+/*-------- QSlice --------*/
+typedef struct {
+    size_t len;
+    const uint8_t *start;
+    bool _is_alloced;
+} _z_qslice_t;
+
+static inline _z_qslice_t _z_qslice_null(void) { return (_z_qslice_t){0}; }
+static inline bool _z_qslice_is_empty(const _z_qslice_t *bs) { return bs->len == 0; }
+static inline bool _z_qslice_check(const _z_qslice_t *slice) { return slice->start != NULL; }
+static inline bool _z_qslice_is_alloced(const _z_qslice_t *slice) { return slice->_is_alloced; }
+static inline _z_qslice_t _z_qslice_alias(const _z_qslice_t bs) {
+    _z_qslice_t ret;
+    ret.len = bs.len;
+    ret.start = bs.start;
+    ret._is_alloced = false;
+    return ret;
+}
+static inline _z_qslice_t _z_qslice_alias_buf(const uint8_t *p, size_t len) {
+    _z_qslice_t bs;
+    bs.len = len;
+    bs.start = p;
+    bs._is_alloced = false;
+    return bs;
+}
+
+static inline _z_qslice_t _z_qslice_steal_buf(const uint8_t *p, size_t len) {
+    _z_qslice_t bs;
+    bs.len = len;
+    bs.start = p;
+    bs._is_alloced = true;
+    return bs;
+}
+
+static inline _z_qslice_t _z_qslice_from_slice(_z_slice_t *bs) {
+    _z_qslice_t qs;
+    qs.len = bs->len;
+    qs.start = bs->start;
+    qs._is_alloced = _z_slice_is_alloced(bs);
+    return qs;
+}
+
+static inline _z_qslice_t _z_qslice_steal_slice(_z_slice_t *bs) {
+    _z_qslice_t qs = _z_qslice_from_slice(bs);
+    *bs = _z_slice_null();
+    return qs;
+}
+
+z_result_t _z_qslice_init(_z_qslice_t *bs, size_t capacity);
+_z_qslice_t _z_qslice_make(size_t capacity);
+_z_qslice_t _z_qslice_copy_from_buf(const uint8_t *bs, size_t len);
+_z_qslice_t _z_qslice_steal(_z_qslice_t *b);
+z_result_t _z_qslice_copy(_z_qslice_t *dst, const _z_qslice_t *src);
+z_result_t _z_qslice_n_copy(_z_qslice_t *dst, const _z_qslice_t *src, size_t offset, size_t len);
+_z_qslice_t _z_qslice_duplicate(const _z_qslice_t *src);
+z_result_t _z_qslice_move(_z_qslice_t *dst, _z_qslice_t *src);
+bool _z_qslice_eq(const _z_qslice_t *left, const _z_qslice_t *right);
+void _z_qslice_clear(_z_qslice_t *bs);
+void _z_qslice_free(_z_qslice_t **bs);
+
+static inline _z_slice_t _z_slice_from_qslice(_z_qslice_t *qs) {
+    _z_slice_t bs;
+    bs.len = qs->len;
+    bs.start = qs->start;
+    if (qs->_is_alloced) {
+        bs._delete_context = _z_delete_context_default();
+    } else {
+        bs._delete_context = _z_delete_context_null();
+    }
+    return bs;
+}
+
+static inline _z_slice_t _z_slice_steal_qslice(_z_qslice_t *qs) {
+    _z_slice_t bs = _z_slice_from_qslice(qs);
+    *qs = _z_qslice_null();
+    return bs;
+}
+
 #ifdef __cplusplus
 }
 #endif
