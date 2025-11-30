@@ -50,7 +50,7 @@ typedef struct _z_lru_cache_t {
     _z_lru_cache_node_t *slist;  // Sorted node list
 } _z_lru_cache_t;
 
-_z_lru_cache_t _z_lru_cache_init(size_t capacity);
+_z_lru_cache_t _z_lru_cache_init(size_t capacity, size_t value_size);
 void *_z_lru_cache_get(_z_lru_cache_t *cache, void *value, _z_lru_val_cmp_f compare, z_element_hash_f elem_hash,
                        size_t value_size);
 z_result_t _z_lru_cache_insert(_z_lru_cache_t *cache, void *value, size_t value_size, _z_lru_val_cmp_f compare,
@@ -60,7 +60,9 @@ void _z_lru_cache_delete(_z_lru_cache_t *cache, z_element_clear_f clear, size_t 
 
 #define _Z_LRU_CACHE_DEFINE(name, type, compare_f)                                                                    \
     typedef _z_lru_cache_t name##_lru_cache_t;                                                                        \
-    static inline name##_lru_cache_t name##_lru_cache_init(size_t capacity) { return _z_lru_cache_init(capacity); }   \
+    static inline name##_lru_cache_t name##_lru_cache_init(size_t capacity) {                                         \
+        return _z_lru_cache_init(capacity, sizeof(type));                                                             \
+    }                                                                                                                 \
     static inline type *name##_lru_cache_get(name##_lru_cache_t *cache, type *val) {                                  \
         return (type *)_z_lru_cache_get(cache, (void *)val, compare_f, name##_elem_hash, sizeof(type));               \
     }                                                                                                                 \

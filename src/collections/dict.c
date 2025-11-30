@@ -74,7 +74,7 @@ static inline z_result_t _z_dict_expand(_z_dict_t *map, z_element_hash_f f_hash,
     return _Z_RES_OK;
 }
 
-_z_dict_t _z_dict_init(size_t capacity, bool resizable) {
+_z_dict_t _z_dict_init(size_t capacity, bool resizable, size_t key_size, size_t val_size) {
     _z_dict_t map = _z_dict_null();
 
     if ((capacity == 0) || (capacity % 2 != 0)) {
@@ -83,6 +83,16 @@ _z_dict_t _z_dict_init(size_t capacity, bool resizable) {
         map._capacity = capacity;
     }
     map.resizable = resizable;
+    // Initialize the table
+    if (map._vals == NULL) {
+        size_t map_size = map._capacity * (key_size + val_size);
+        map._vals = z_malloc(map_size);
+        if (map._vals == NULL) {
+            _Z_ERROR_LOG(_Z_ERR_SYSTEM_OUT_OF_MEMORY);
+            return _z_dict_null();
+        }
+        (void)memset(map._vals, 0xff, map_size);
+    }
     return map;
 }
 
@@ -91,18 +101,10 @@ z_result_t _z_dict_insert(_z_dict_t *map, void *key, void *val, z_element_hash_f
     // Cannot insert "empty" key
     assert(!_z_dict_entry_is_empty(key, key_size));
 
-    // Lazily allocate and initialize the table
-    if (map->_vals == NULL) {
-        size_t map_size = map->_capacity * (key_size + val_size);
-        map->_vals = z_malloc(map_size);
-        if (map->_vals == NULL) {
-            _Z_ERROR_RETURN(_Z_ERR_SYSTEM_OUT_OF_MEMORY);
-        }
-        (void)memset(map->_vals, 0xff, map_size);
-    } else if (map->_len * 10 >= map->_capacity * EXPAND_LOAD_FACTOR) {
+    if (map->_len * 10 >= map->_capacity * EXPAND_LOAD_FACTOR) {
         if (map->resizable) {
             _Z_RETURN_IF_ERR(_z_dict_expand(map, f_hash, f_equals, key_size, val_size));
-        } else if (map->_len == map->_capacity) {
+        } else {
             _Z_ERROR_RETURN(_Z_ERR_OVERFLOW);
         }
     }
