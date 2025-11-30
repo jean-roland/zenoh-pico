@@ -26,7 +26,7 @@
 extern "C" {
 #endif
 
-#define _Z_DEFAULT_dict_CAPACITY 16  // Must be power of 2
+#define _Z_DEFAULT_DICT_CAPACITY 16  // Must be power of 2
 
 // Hashmap entry struct: {key; value}
 typedef void _z_dict_entry_t;
@@ -47,7 +47,7 @@ typedef struct {
     _z_dict_entry_t *_vals;
 } _z_dict_t;
 
-_z_dict_t _z_dict_init(size_t capacity, bool resizable, size_t key_size, size_t val_size);
+z_result_t _z_dict_init(_z_dict_t *map, size_t capacity, bool resizable, size_t key_size, size_t val_size);
 z_result_t _z_dict_insert(_z_dict_t *map, void *key, void *val, z_element_hash_f f_hash, z_element_eq_f f_equals,
                           size_t key_size, size_t val_size);
 void *_z_dict_get(const _z_dict_t *map, const void *key, z_element_hash_f f_hash, z_element_eq_f f_equals,
@@ -58,10 +58,10 @@ void _z_dict_clear(_z_dict_t *map, z_element_clear_f key_f_clear, z_element_clea
                    size_t val_size);
 void _z_dict_delete(_z_dict_t *map);
 
-#define _Z_dict_DEFINE(map_name, key_name, val_name, key_type, val_type)                                              \
+#define _Z_DICT_DEFINE(map_name, key_name, val_name, key_type, val_type)                                              \
     typedef _z_dict_t map_name##_hashmap_t;                                                                           \
-    static inline _z_dict_t map_name##_dict_init(size_t capacity, bool resizable) {                                   \
-        return _z_dict_init(capacity, resizable, sizeof(key_type), sizeof(val_type));                                 \
+    static inline z_result_t map_name##_dict_init(_z_dict_t *map, size_t capacity, bool resizable) {                  \
+        return _z_dict_init(map, capacity, resizable, sizeof(key_type), sizeof(val_type));                            \
     }                                                                                                                 \
     static inline z_result_t map_name##_dict_insert(map_name##_hashmap_t *m, key_type *k, val_type *v) {              \
         return _z_dict_insert(m, k, v, key_name##_elem_hash, key_name##_elem_eq, sizeof(key_type), sizeof(val_type)); \

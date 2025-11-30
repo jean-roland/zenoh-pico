@@ -252,18 +252,18 @@ static _z_lru_cache_node_t *_z_lru_cache_search_node(_z_lru_cache_t *cache, void
 }
 
 // Public functions
-_z_lru_cache_t _z_lru_cache_init(size_t capacity, size_t value_size) {
-    _z_lru_cache_t cache = _z_lru_cache_null();
+z_result_t _z_lru_cache_init(_z_lru_cache_t *cache, size_t capacity, size_t value_size) {
+    *cache = _z_lru_cache_null();
     // Init slist
-    cache.slist_len = capacity * OVERSIZE_FACTOR;
-    cache.slist = (_z_lru_cache_node_t *)z_malloc(cache.slist_len * (value_size + NODE_DATA_SIZE));
-    if (cache.slist == NULL) {
-        _Z_ERROR_LOG(_Z_ERR_SYSTEM_OUT_OF_MEMORY);
-        return _z_lru_cache_null();
+    cache->slist_len = capacity * OVERSIZE_FACTOR;
+    size_t list_size = cache->slist_len * (value_size + NODE_DATA_SIZE);
+    cache->slist = (_z_lru_cache_node_t *)z_malloc(list_size);
+    if (cache->slist == NULL) {
+        _Z_ERROR_RETURN(_Z_ERR_SYSTEM_OUT_OF_MEMORY);
     }
-    memset(cache.slist, 0xFF, cache.slist_len * (value_size + NODE_DATA_SIZE));
-    cache.capacity = capacity;
-    return cache;
+    memset(cache->slist, 0xFF, list_size);
+    cache->capacity = capacity;
+    return _Z_RES_OK;
 }
 
 void *_z_lru_cache_get(_z_lru_cache_t *cache, void *value, _z_lru_val_cmp_f compare, z_element_hash_f elem_hash,

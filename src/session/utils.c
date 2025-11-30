@@ -81,13 +81,13 @@ z_result_t _z_session_init(_z_session_t *zn, const _z_id_t *zid) {
     zn->_subscriptions = NULL;
     zn->_liveliness_subscriptions = NULL;
 #if Z_FEATURE_RX_CACHE == 1
-    zn->_subscription_cache = _z_subscription_lru_cache_init(Z_RX_CACHE_SIZE);
+    _Z_RETURN_IF_ERR(_z_subscription_lru_cache_init(&zn->_subscription_cache, Z_RX_CACHE_SIZE));
 #endif
 #endif
 #if Z_FEATURE_QUERYABLE == 1
     zn->_local_queryable = NULL;
 #if Z_FEATURE_RX_CACHE == 1
-    zn->_queryable_cache = _z_queryable_lru_cache_init(Z_RX_CACHE_SIZE);
+    _Z_RETURN_IF_ERR(_z_queryable_lru_cache_init(&zn->_queryable_cache, Z_RX_CACHE_SIZE));
 #endif
 #endif
 #if Z_FEATURE_QUERY == 1

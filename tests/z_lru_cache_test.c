@@ -52,22 +52,24 @@ static inline size_t _dummy_elem_hash(const void *e) {
 _Z_LRU_CACHE_DEFINE(_dummy, _dummy_t, _dummy_compare)
 
 void test_lru_init(void) {
-    _dummy_lru_cache_t dcache = _dummy_lru_cache_init(CACHE_CAPACITY);
+    _dummy_lru_cache_t dcache;
+    assert(_dummy_lru_cache_init(&dcache, CACHE_CAPACITY) == _Z_RES_OK);
     assert(dcache.capacity == CACHE_CAPACITY);
     assert(dcache.len == 0);
     assert(dcache.head == NULL);
     assert(dcache.tail == NULL);
-    assert(dcache.slist == NULL);
+    assert(dcache.slist != NULL);
+    _dummy_lru_cache_delete(&dcache);
 }
 
 void test_lru_cache_insert(void) {
-    _dummy_lru_cache_t dcache = _dummy_lru_cache_init(CACHE_CAPACITY);
+    _dummy_lru_cache_t dcache;
+    assert(_dummy_lru_cache_init(&dcache, CACHE_CAPACITY) == _Z_RES_OK);
 
     _dummy_t v0 = {0};
-    assert(dcache.slist == NULL);
+    assert(dcache.slist != NULL);
     assert(_dummy_lru_cache_get(&dcache, &v0) == NULL);
     assert(_dummy_lru_cache_insert(&dcache, &v0) == 0);
-    assert(dcache.slist != NULL);
     _dummy_t *res = _dummy_lru_cache_get(&dcache, &v0);
     assert(res != NULL);
     assert(res->foo == v0.foo);
@@ -86,7 +88,8 @@ void test_lru_cache_insert(void) {
 }
 
 void test_lru_cache_clear(void) {
-    _dummy_lru_cache_t dcache = _dummy_lru_cache_init(CACHE_CAPACITY);
+    _dummy_lru_cache_t dcache;
+    assert(_dummy_lru_cache_init(&dcache, CACHE_CAPACITY) == _Z_RES_OK);
 
     _dummy_t data[CACHE_CAPACITY] = {0};
     for (size_t i = 0; i < CACHE_CAPACITY; i++) {
@@ -106,7 +109,8 @@ void test_lru_cache_clear(void) {
 }
 
 void test_lru_cache_deletion(void) {
-    _dummy_lru_cache_t dcache = _dummy_lru_cache_init(CACHE_CAPACITY);
+    _dummy_lru_cache_t dcache;
+    assert(_dummy_lru_cache_init(&dcache, CACHE_CAPACITY) == _Z_RES_OK);
     _dummy_t data[CACHE_CAPACITY + 1] = {0};
     for (size_t i = 0; i < CACHE_CAPACITY + 1; i++) {
         // printf("Inserting %ld\n", i);
@@ -125,7 +129,8 @@ void test_lru_cache_deletion(void) {
 }
 
 void test_lru_cache_update(void) {
-    _dummy_lru_cache_t dcache = _dummy_lru_cache_init(CACHE_CAPACITY);
+    _dummy_lru_cache_t dcache;
+    assert(_dummy_lru_cache_init(&dcache, CACHE_CAPACITY) == _Z_RES_OK);
 
     _dummy_t data[CACHE_CAPACITY] = {0};
     for (size_t i = 0; i < CACHE_CAPACITY; i++) {
@@ -152,7 +157,8 @@ static bool val_in_array(int val, int *array, size_t array_size) {
 }
 
 void test_lru_cache_random_val(void) {
-    _dummy_lru_cache_t dcache = _dummy_lru_cache_init(10 * CACHE_CAPACITY);
+    _dummy_lru_cache_t dcache;
+    assert(_dummy_lru_cache_init(&dcache, 10 * CACHE_CAPACITY) == _Z_RES_OK);
 
     _dummy_t data[11 * CACHE_CAPACITY] = {
         {1804289383}, {846930886},  {1681692777}, {1714636915}, {1957747793}, {424238335},  {719885386},  {1649760492},
@@ -231,7 +237,8 @@ int lcg_next(lcg_state *state) {
 }
 
 void test_search_benchmark(size_t capacity) {
-    _dummy_lru_cache_t dcache = _dummy_lru_cache_init(capacity);
+    _dummy_lru_cache_t dcache;
+    assert(_dummy_lru_cache_init(&dcache, capacity) == _Z_RES_OK);
     _dummy_t *data = (_dummy_t *)malloc(capacity * sizeof(_dummy_t));
     assert(data != NULL);
     memset(data, 0, capacity * sizeof(_dummy_t));
@@ -258,7 +265,8 @@ void test_search_benchmark(size_t capacity) {
 }
 
 void test_insert_benchmark(size_t capacity) {
-    _dummy_lru_cache_t dcache = _dummy_lru_cache_init(capacity);
+    _dummy_lru_cache_t dcache;
+    assert(_dummy_lru_cache_init(&dcache, capacity) == _Z_RES_OK);
 
     lcg_state state;
     lcg_seed(&state, 0x55);

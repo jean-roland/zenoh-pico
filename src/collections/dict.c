@@ -74,33 +74,32 @@ static inline z_result_t _z_dict_expand(_z_dict_t *map, z_element_hash_f f_hash,
     return _Z_RES_OK;
 }
 
-_z_dict_t _z_dict_init(size_t capacity, bool resizable, size_t key_size, size_t val_size) {
-    _z_dict_t map = _z_dict_null();
-
+z_result_t _z_dict_init(_z_dict_t *map, size_t capacity, bool resizable, size_t key_size, size_t val_size) {
+    *map = _z_dict_null();
+    // Capacity must be power of 2 for INDEX_WRAP to work
     if ((capacity == 0) || (capacity % 2 != 0)) {
-        map._capacity = _Z_DEFAULT_dict_CAPACITY;
+        map->_capacity = _Z_DEFAULT_DICT_CAPACITY;
     } else {
-        map._capacity = capacity;
+        map->_capacity = capacity;
     }
-    map.resizable = resizable;
+    map->resizable = resizable;
     // Initialize the table
-    if (map._vals == NULL) {
-        size_t map_size = map._capacity * (key_size + val_size);
-        map._vals = z_malloc(map_size);
-        if (map._vals == NULL) {
-            _Z_ERROR_LOG(_Z_ERR_SYSTEM_OUT_OF_MEMORY);
-            return _z_dict_null();
-        }
-        (void)memset(map._vals, 0xff, map_size);
+    size_t map_size = map->_capacity * (key_size + val_size);
+    map->_vals = z_malloc(map_size);
+    if (map->_vals == NULL) {
+        _Z_ERROR_RETURN(_Z_ERR_SYSTEM_OUT_OF_MEMORY);
     }
-    return map;
+    (void)memset(map->_vals, 0xff, map_size);
+    return _Z_RES_OK;
 }
 
 z_result_t _z_dict_insert(_z_dict_t *map, void *key, void *val, z_element_hash_f f_hash, z_element_eq_f f_equals,
                           size_t key_size, size_t val_size) {
     // Cannot insert "empty" key
     assert(!_z_dict_entry_is_empty(key, key_size));
+    assert(map->_vals != NULL);
 
+    // Expand table if load factor exceeded
     if (map->_len * 10 >= map->_capacity * EXPAND_LOAD_FACTOR) {
         if (map->resizable) {
             _Z_RETURN_IF_ERR(_z_dict_expand(map, f_hash, f_equals, key_size, val_size));
@@ -134,9 +133,8 @@ z_result_t _z_dict_insert(_z_dict_t *map, void *key, void *val, z_element_hash_f
 
 void *_z_dict_get(const _z_dict_t *map, const void *key, z_element_hash_f f_hash, z_element_eq_f f_equals,
                   size_t key_size, size_t val_size) {
-    if (map->_vals == NULL) {
-        return NULL;
-    }
+    assert(map->_vals != NULL);
+
     // Retrieve bucket
     size_t idx = INDEX_WRAP(f_hash(key), map->_capacity);
     _z_dict_entry_t *curr_bucket =
@@ -156,9 +154,8 @@ void *_z_dict_get(const _z_dict_t *map, const void *key, z_element_hash_f f_hash
 
 void _z_dict_remove(_z_dict_t *map, const void *k, z_element_hash_f f_hash, z_element_eq_f f_equals,
                     z_element_clear_f key_f_clear, z_element_clear_f val_f_clear, size_t key_size, size_t val_size) {
-    if (map->_vals == NULL) {
-        return;
-    }
+    assert(map->_vals != NULL);
+
     // Retrieve bucket
     size_t idx = INDEX_WRAP(f_hash(k), map->_capacity);
     _z_dict_entry_t *curr_bucket =
@@ -210,9 +207,8 @@ void _z_dict_remove(_z_dict_t *map, const void *k, z_element_hash_f f_hash, z_el
 
 void _z_dict_clear(_z_dict_t *map, z_element_clear_f key_f_clear, z_element_clear_f val_f_clear, size_t key_size,
                    size_t val_size) {
-    if (map->_vals == NULL) {
-        return;
-    }
+    assert(map->_vals != NULL);
+
     for (size_t idx = 0; idx < map->_capacity; idx++) {
         _z_dict_entry_t *curr_entry =
             (void *)_z_ptr_u8_offset((uint8_t *)map->_vals, (ptrdiff_t)(idx * (key_size + val_size)));
@@ -226,9 +222,7 @@ void _z_dict_clear(_z_dict_t *map, z_element_clear_f key_f_clear, z_element_clea
 }
 
 void _z_dict_delete(_z_dict_t *map) {
-    if (map->_vals == NULL) {
-        return;
-    }
+    assert(map->_vals != NULL);
     map->_len = 0;
     z_free(map->_vals);
     map->_vals = NULL;

@@ -33,23 +33,25 @@ typedef struct _dummy_t {
 
 static inline void _dummy_elem_clear(void *e) { _z_noop_clear((_dummy_t *)e); }
 
-_Z_dict_DEFINE(test, _z_string, _dummy, _z_string_t, _dummy_t)
+_Z_DICT_DEFINE(test, _z_string, _dummy, _z_string_t, _dummy_t)
 
-    void test_hashmap_init(void) {
-    test_hashmap_t hmap = test_dict_init(0, true);
-    assert(hmap._capacity == _Z_DEFAULT_dict_CAPACITY);
-    assert(hmap._vals == NULL);
+void test_hashmap_init(void) {
+    test_hashmap_t hmap;
+    assert(test_dict_init(&hmap, 0, true) == _Z_RES_OK);
+    assert(hmap._capacity == _Z_DEFAULT_DICT_CAPACITY);
+    assert(hmap._vals != NULL);
+    test_dict_delete(&hmap);
 }
 
 void test_hashmap_insert(void) {
-    test_hashmap_t hmap = test_dict_init(0, true);
+    test_hashmap_t hmap;
+    assert(test_dict_init(&hmap, 0, true) == _Z_RES_OK);
 
     _z_string_t k0 = _z_string_alias_str("key0");
     _dummy_t v0 = {0};
-    assert(hmap._vals == NULL);
+    assert(hmap._vals != NULL);
     assert(test_dict_get(&hmap, &k0) == NULL);
     assert(test_dict_insert(&hmap, &k0, &v0) == _Z_RES_OK);
-    assert(hmap._vals != NULL);
     _dummy_t *res = test_dict_get(&hmap, &k0);
     assert(res != NULL);
     assert(res->foo == v0.foo);
@@ -73,7 +75,8 @@ void test_hashmap_insert(void) {
 }
 
 void test_hashmap_clear(void) {
-    test_hashmap_t hmap = test_dict_init(0, true);
+    test_hashmap_t hmap;
+    assert(test_dict_init(&hmap, 0, true) == _Z_RES_OK);
 
     _dummy_t data[HMAP_CAPACITY] = {0};
     _z_string_t keys[HMAP_CAPACITY] = {0};
@@ -84,7 +87,7 @@ void test_hashmap_clear(void) {
         assert(test_dict_insert(&hmap, &keys[i], &data[i]) == _Z_RES_OK);
     }
     test_dict_clear(&hmap);
-    assert(hmap._capacity == _Z_DEFAULT_dict_CAPACITY);
+    assert(hmap._capacity == _Z_DEFAULT_DICT_CAPACITY);
     assert(hmap._len == 0);
     for (size_t i = 0; i < HMAP_CAPACITY; i++) {
         assert(test_dict_get(&hmap, &keys[i]) == NULL);
@@ -93,7 +96,8 @@ void test_hashmap_clear(void) {
 }
 
 void test_hashmap_remove(void) {
-    test_hashmap_t hmap = test_dict_init(0, true);
+    test_hashmap_t hmap;
+    assert(test_dict_init(&hmap, 0, true) == _Z_RES_OK);
 
     _dummy_t data[HMAP_CAPACITY] = {0};
     _z_string_t keys[HMAP_CAPACITY] = {0};
@@ -150,7 +154,8 @@ void generate_kv(_z_string_t *key, _dummy_t *val, lcg_state *state, size_t len) 
 }
 
 void test_op_benchmark(size_t capacity) {
-    test_hashmap_t hmap = test_dict_init(0, true);
+    test_hashmap_t hmap;
+    assert(test_dict_init(&hmap, 0, true) == _Z_RES_OK);
     _dummy_t *data = (_dummy_t *)malloc(capacity * sizeof(_dummy_t));
     _z_string_t *keys = (_z_string_t *)malloc(capacity * sizeof(_z_string_t));
     _z_string_t *bad_keys = (_z_string_t *)malloc(capacity * sizeof(_z_string_t));
