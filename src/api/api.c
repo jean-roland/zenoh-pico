@@ -1820,7 +1820,7 @@ const z_loaned_keyexpr_t *z_queryable_keyexpr(const z_loaned_queryable_t *querya
     }
     _z_session_t *zn = _Z_RC_IN_VAL(&sess_rc);
 #else
-    _z_session_t *zn = _z_session_weak_as_unsafe_ptr(&sub->_zn);
+    _z_session_t *zn = _z_session_weak_as_unsafe_ptr(&queryable->_zn);
 #endif
     _z_session_mutex_lock(zn);
     _z_session_queryable_rc_slist_t *node = zn->_local_queryable;
